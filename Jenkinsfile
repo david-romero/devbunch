@@ -25,10 +25,10 @@ pipeline {
            steps {
                 deleteDir()
            }
-      }
-       stage('checkout') {
+       }
+       stage('Checkout') {
             steps {
-                git(url: 'https://github.com/david-romero/devbunch', branch: '$BRANCH_NAME', poll: true, changelog: true)
+                  checkout scm
             }
        }
        stage ('Build') { //Compile stage
@@ -60,18 +60,31 @@ pipeline {
           post {
                success {
                     junit 'collector/target/surefire-reports/**/*.xml' 
+                    junit 'extractor/target/surefire-reports/**/*.xml' 
+                    junit 'graph-model/target/surefire-reports/**/*.xml' 
                }
           }
       }
-      stage ('Checking PR commits') {
-          when {
-                expression { BRANCH_NAME != 'master' }
+      stage ('Install') {
+            when {
+              expression { return env.BRANCH_NAME.equals('develop')  || env.BRANCH_NAME.equals('master')  }
             }
             steps {
-                echo 'Deploying' + env.BRANCH_NAME
+                 sh "mvn clean install"
+            }
+      }
+      stage ('Checking PR commits') {
+            when {
+                expression { return env.BRANCH_NAME.startsWith('PR-') }
+            }
+            steps {
+                echo 'Review ' + env.BRANCH_NAME
             }
       }
       stage ('Confirmation') {
+           when {
+            branch 'master'
+           }
            //In this stage, pipeline wait until user confirm next stage.
            //It sends slack messages
            steps {
@@ -91,6 +104,9 @@ pipeline {
            }
       }
       stage ('Deploy to Production environment') {
+           when {
+            branch 'master'
+           }
            //We deploy in parrallel mode during 6 times. 
            steps {
                 parallel 'Server 1': {
