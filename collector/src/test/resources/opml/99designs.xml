@@ -1,0 +1,1756 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Turtles all the way down</title>
+    <description>Occassional updates on Go, Ruby, PHP, JavaScript and anything else that goes into the world's biggest design platform
+</description>
+    <link>https://99designs.com/tech-blog/</link>
+    <atom:link href="https://99designs.com/tech-blog/feed.xml" rel="self" type="application/rss+xml" />
+    <pubDate>Tue, 04 Apr 2017 12:19:46 +1000</pubDate>
+    <lastBuildDate>Tue, 04 Apr 2017 12:19:46 +1000</lastBuildDate>
+    <generator>Jekyll v3.4.3</generator>
+    
+      <item>
+        <title>AWS EC2 Container Registry and aws&amp;#8209;ecr&amp;#8209;gc</title>
+        <description>&lt;p&gt;When you visit 99designs.com, you&amp;#39;re interacting with a collection of web
+applications running as Docker containers on &lt;a href=&quot;https://aws.amazon.com/&quot;&gt;AWS&lt;/a&gt; EC2 machines. We&amp;#39;re
+continually improving those applications, deploying updates many times per day.
+Our &lt;a href=&quot;https://buildkite.com/&quot;&gt;Buildkite&lt;/a&gt; continuous integration (CI) setup automatically builds and
+tests each update as a new Docker image, pushing it to a private Docker
+registry and deploying it to our production servers.  Development of 99designs
+also happens in Docker containers, using images pulled from a private Docker
+registry.&lt;/p&gt;
+
+&lt;p&gt;Having tried a few Docker registry providers, we&amp;#39;ve landed on &lt;a href=&quot;https://hub.docker.com/&quot;&gt;Docker Hub&lt;/a&gt;
+run by Docker, Inc. But when AWS &lt;a href=&quot;https://aws.amazon.com/blogs/aws/ec2-container-registry-now-generally-available/&quot;&gt;announced&lt;/a&gt; general availability
+of their own &lt;a href=&quot;https://aws.amazon.com/ecr/&quot;&gt;EC2 Container Registry (ECR)&lt;/a&gt; we were interested in the idea
+of having our Docker registry running on the same provider as the rest of our
+infrastructure so that;&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://aws.amazon.com/documentation/iam/&quot;&gt;IAM&lt;/a&gt; can be used for access control to our images,&lt;/li&gt;
+&lt;li&gt;fewer third-party organizations have access to our intellectual property,&lt;/li&gt;
+&lt;li&gt;the chance of hacks/leaks impacting us is reduced.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;ECR differs from Docker Hub in a number of ways, and one of those differences
+prompted us to build a new tool that I&amp;#39;ll introduce below.&lt;/p&gt;
+
+&lt;p&gt;So let&amp;#39;s step through some of those differences.&lt;/p&gt;
+
+&lt;h2&gt;Image naming&lt;/h2&gt;
+
+&lt;p&gt;Docker image names range from short and simple to long and complex, for example;&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;ubuntu&lt;/code&gt; - an official image (no username), and implicitly the &lt;code&gt;latest&lt;/code&gt; tag.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;ubuntu:16.04&lt;/code&gt; - the &lt;code&gt;16.04&lt;/code&gt; tag of the same image.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;jess/chrome&lt;/code&gt; - an image called &lt;code&gt;chrome&lt;/code&gt; published by user &lt;code&gt;jess&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;jess/chrome:beta&lt;/code&gt; - the &lt;code&gt;beta&lt;/code&gt; tag of the same image.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;None of the above images specify a registry hostname, so they&amp;#39;re assumed to be
+on Docker Hub… one of the benefits of being Docker, Inc.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;quay.io/username/repo&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;quay.io/username/repo:stable&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;The above images are much like Docker Hub ones, but on &lt;a href=&quot;https://quay.io/&quot;&gt;Quay&lt;/a&gt;, a
+third-party private registry.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;727283191883.dkr.ecr.us-east-1.amazonaws.com/example&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;727283191883.dkr.ecr.us-east-1.amazonaws.com/example:release-production-abd9295-f9b8272&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;The above are image names (untagged and tagged) on Amazon ECR. They&amp;#39;re fine for
+automated process, but unwieldy for humans in development environments.&lt;/p&gt;
+
+&lt;h2&gt;Authentication&lt;/h2&gt;
+
+&lt;p&gt;Authentication to private Docker registries is normally done with &lt;code&gt;docker
+login&lt;/code&gt; which writes the credentials to &lt;code&gt;~/.docker/config.json&lt;/code&gt;, where they&amp;#39;re
+used for subsequent push/pull operations for that registry.&lt;/p&gt;
+
+&lt;p&gt;As a bridge between this mechanism and AWS IAM, the &lt;a href=&quot;https://aws.amazon.com/cli/&quot;&gt;AWS Command Line
+Interface&lt;/a&gt; has an &lt;code&gt;aws ecr get-login&lt;/code&gt; command which, assuming the
+requesting AWS user/role has the correct access, returns a ready-to-run
+&lt;code&gt;docker login ...&lt;/code&gt; command with generated credentials built in.&lt;/p&gt;
+
+&lt;p&gt;The generated credentials expire in twelve hours, after which new credentials
+must be requested. As with the complex image names, this is fine for automated
+processes but unwieldy for development environments.&lt;/p&gt;
+
+&lt;h2&gt;Image storage limits&lt;/h2&gt;
+
+&lt;p&gt;It&amp;#39;s common to continually push new images with new tags to a Docker
+repository, e.g. &lt;code&gt;build-20170303-152000&lt;/code&gt;, &lt;code&gt;build-20170303-153100&lt;/code&gt;, etc. Even
+continually pushing to a single &lt;code&gt;latest&lt;/code&gt; tag may lead to unbounded storage of
+untagged images.&lt;/p&gt;
+
+&lt;p&gt;Docker Hub seems to brush this under the carpet, presumably wearing the cost
+for now. AWS ECR, however, defaults to a limit of 1,000 images per repository.
+It&amp;#39;s possible to request a limit increase, but this highlights the reality
+that image storage needs to be accounted for eventually.&lt;/p&gt;
+
+&lt;h2&gt;Introducing aws-ecr-gc&lt;/h2&gt;
+
+&lt;p&gt;Our solution to staying under the ECR image limit while keeping a healthy
+number of  previous image tags is &lt;a href=&quot;https://github.com/99designs/aws-ecr-gc&quot;&gt;aws-ecr-gc&lt;/a&gt;. It assumes that
+related tags in a repository will have a common prefix. For example a CI
+repository may contain &lt;code&gt;build-a92d&lt;/code&gt;, &lt;code&gt;build-71ba&lt;/code&gt;, &lt;code&gt;build-321d&lt;/code&gt; as well as
+&lt;code&gt;release-latest&lt;/code&gt;, &lt;code&gt;release-previous&lt;/code&gt;, &lt;code&gt;release-a92d&lt;/code&gt;, &lt;code&gt;release-71ba&lt;/code&gt; etc.&lt;/p&gt;
+
+&lt;p&gt;Given a list of tag prefixes e.g. &lt;code&gt;build&lt;/code&gt; and &lt;code&gt;release&lt;/code&gt;, &lt;code&gt;aws-ecr-gc&lt;/code&gt; deletes
+all but the newest &lt;code&gt;N&lt;/code&gt; images matching those prefixes. Images with tags not
+matching the listed prefixes are not deleted. Optionally, untagged images are
+also deleted.&lt;/p&gt;
+
+&lt;p&gt;Example; delete all untagged images, delete all but the latest 4 images with
+tags starting with &lt;code&gt;release-production&lt;/code&gt;, and delete all but the latest 8 images
+with tags starting with &lt;code&gt;build&lt;/code&gt;:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-&quot; data-lang=&quot;&quot;&gt;$ export AWS_DEFAULT_REGION=us-east-1
+$ aws-ecr-gc --repo testrepo --delete-untagged=true --keep release-production=4 --keep build=8
+Total images in testrepo (us-east-1): 47
+Images to delete (3)
+  2017-03-20 03:51:41: sha256:2a1fce5b2... [build-64cd372]
+  2017-03-17 17:12:07: sha256:4fe1451fc... [build-1d293f7]
+  2017-03-17 16:58:15: sha256:e0a2a1b4f... [build-6d12484]
+Deleted (3)
+  sha256:2a1fce5b2... (build-64cd372)
+  sha256:4fe1451fc... (build-1d293f7)
+  sha256:e0a2a1b4f... (build-6d12484)
+Failures (0)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;AWS ECR is great for automated build and deploy processes, but less convenient
+for people working with the Docker images. So we&amp;#39;ve moved our CI and deployment
+processes from Docker Hub to ECR, but left our developer-facing Docker images
+on Docker Hub for simpler authentication and image naming.&lt;/p&gt;
+
+&lt;p&gt;Today we&amp;#39;re releasing &lt;a href=&quot;https://github.com/99designs/aws-ecr-gc&quot;&gt;&lt;code&gt;aws-ecr-gc&lt;/code&gt;&lt;/a&gt; under the MIT open source
+license. Adding it as a CI build step cleans up old images while keeping some
+recent releases in case rollback or debugging are required.&lt;/p&gt;
+
+&lt;p&gt;Check out &lt;a href=&quot;https://github.com/99designs/aws-ecr-gc&quot;&gt;&lt;code&gt;aws-ecr-gc&lt;/code&gt; on GitHub&lt;/a&gt;.&lt;/p&gt;
+</description>
+        <pubDate>Tue, 04 Apr 2017 00:00:00 +1000</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2017/04/04/aws-ecr-gc/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2017/04/04/aws-ecr-gc/</guid>
+        
+        
+        <category>aws</category>
+        
+        <category>devops</category>
+        
+        <category>docker</category>
+        
+        <category>golang</category>
+        
+      </item>
+    
+      <item>
+        <title>Real–world HTTP/2: 400gb of images per day</title>
+        <description>&lt;p&gt;The now–finalized HTTP/2 specification has rightfully garnered a lot of interest from the web performance community. The new protocol is aimed at addressing common network performance issues with the aging HTTP/1.x protocol, whilst preserving the existing semantics.&lt;/p&gt;
+
+&lt;p&gt;We began a small-scale rollout for static assets earlier this year. After building confidence in our new infrastructure, we began transitioning our static assets to HTTP/2. Surprisingly, some sections of our platform felt noticeably slower. This post will cover our investigation into the performance regressions we experienced by adopting HTTP/2.&lt;/p&gt;
+
+&lt;p&gt;Our story isn’t the panacea of web performance typically associated with HTTP/2. We hope sharing our sobering experience will help to balance the discussion.&lt;/p&gt;
+
+&lt;h2&gt;Why HTTP/2?&lt;/h2&gt;
+
+&lt;p&gt;For better or worse, the story of HTTP/2 has become tied to notions of &lt;em&gt;free performance&lt;/em&gt; and how it will make &lt;em&gt;everything we know about web performance wrong&lt;/em&gt;.&lt;/p&gt;
+
+&lt;blockquote class=&quot;blockquote&quot;&gt;
+  &lt;h3 class=&quot;heading heading--h3 heading--forrest-lyf&quot;&gt;
+    In reality the performance story of HTTP/2 is one of nuances.
+  &lt;/h3&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Unlike HTTP/1.x which creates a new connection per resource, HTTP/2 creates at most a single connection per hostname. That connection is a multiplexed stream utilizing a binary framing protocol. The binary framing is responsible for matching multiple concurrent requests to responses.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/h2-binary-framing.png&quot; alt=&quot;diagram of HTTP/2’s binary framing protocol&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;Slide from Ilya Grigorik’s presentation: HTTP/2 is here, let’s optimize!&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;No longer being limited to one transaction per connection, &lt;a href=&quot;https://hpbn.co/building-blocks-of-tcp/#head-of-line-blocking&quot;&gt;head-of-line blocking&lt;/a&gt; is largely eliminated. Creating fewer connections also means a reduced sensitivity to latency and TCP congestion controls. In combination, these properties can result in big performance wins because they reduce the volume and duration of round trips between server and client.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/bandwidth-v-latency.png&quot; alt=&quot;graph comparing decreases in page load times relative to decreases in bandwidth vs latency&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;https://www.igvita.com/2012/07/19/latency-the-new-web-performance-bottleneck&lt;/span&gt;&lt;/p&gt;
+
+&lt;h2&gt;Monitoring the performance of HTTP/2&lt;/h2&gt;
+
+&lt;p&gt;We use &lt;a href=&quot;https://calibreapp.com&quot;&gt;Calibre&lt;/a&gt; for synthetic monitoring of end-user performance, collecting a diverse set of metrics. We push a small subset of this data to highly–visible Geckoboards throughout our offices.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/dashboard-1.jpg&quot; alt=&quot;preformance dashboad 1&quot;&gt;
+&lt;img src=&quot;/tech-blog/assets/images/http2/dashboard-2.jpg&quot; alt=&quot;preformance dashboad 2&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;&lt;a href=&quot;http://alistapart.com/article/performance-showing-versus-telling&quot;&gt;Etsy–inspired performance dashboards&lt;/a&gt; in the Melbourne office&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;We used the following metrics as proxies for user-perceived page load performance and the success of HTTP/2. We chose these specific metrics because they’re affected by different aspects of page load life cycle.&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;The DOMContentLoaded event&lt;/strong&gt; is delayed by synchronous scripts.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;The time to first paint&lt;/strong&gt; is delayed by render–blocking resources like CSS and fonts.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;The time to visually complete&lt;/strong&gt; is delayed by non–render–blocking resources like images and potentially asynchronous scripts.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Speed Index&lt;/strong&gt; is affected by the rate of visual completion over time.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2&gt;Testing and verifying the success of HTTP/2&lt;/h2&gt;
+
+&lt;p&gt;We started by migrating our image thumbnail CDN to CloudFlare, which provides HTTP/2 out of the box. Initial benchmarks showed CloudFlare’s latency and response times to be comparable to those of our existing CDN.&lt;/p&gt;
+
+&lt;p&gt;As a design marketplace most of our pages are image–centric, commonly requiring upwards of 50 images.&lt;/p&gt;
+
+&lt;p&gt;Pages with many small resources are adversely affected by minor changes in connection latency with HTTP/1.x. For such latency-bound pages we expected visual completion be reached faster. How much faster would depend on the connection latency and number of images. We expected this trend to continue on high latency, low bandwidth 3G connections.&lt;/p&gt;
+
+&lt;p&gt;For bandwidth–bound pages we expected to see no appreciable change.&lt;/p&gt;
+
+&lt;p&gt;Enabling HTTP/2 for images alone doesn’t affect head–of–line blocking, so we didn’t expect any changes in time to first paint or &lt;code&gt;DOMContentLoaded&lt;/code&gt;.&lt;/p&gt;
+
+&lt;h2&gt;Reality&lt;/h2&gt;
+
+&lt;p&gt;The results weren’t as clear cut. Below I’ll dig into some of the nuances, surprises and future considerations for our HTTP/2 rollout.&lt;/p&gt;
+
+&lt;h4&gt;Testing&lt;/h4&gt;
+
+&lt;p&gt;We enabled the HTTP/2 CDN behind a feature flag and over the next week we recorded approximately 100 Calibre snapshots with and without the new CDN. The Calibre Chrome agents are US-based with low–latency, high–bandwidth connections.&lt;/p&gt;
+
+&lt;h4&gt;Case study: Designer portfolio&lt;/h4&gt;
+
+&lt;p&gt;Designer portfolios are representative of a typical latency–bound 99designs page. Here we observed a 5% improvement in Speed Index and time to visual completion.&lt;/p&gt;
+
+&lt;p&gt;The time to first paint was comparable, but interestingly the initial render was more complete with HTTP/2.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/h2-fast-profile.png&quot; alt=&quot;filmstrip comparing HTTP/1.x and HTTP/2 page load performance&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;More complete initial render with images served over HTTP/2&lt;/span&gt;&lt;/p&gt;
+
+&lt;h4&gt;Case study: Discover design gallery&lt;/h4&gt;
+
+&lt;p&gt;Our &lt;a href=&quot;https://99designs.com/discover&quot;&gt;Discover design galleries&lt;/a&gt; are representative of the extremes of our platform. With 80 images, weighing in at around 10mb per page, these pages are bandwidth–bound so the effects from the reduction in latency should be marginal. As such, we expected no noticeable change in performance.&lt;/p&gt;
+
+&lt;p&gt;What we actually observed was a 5–10% regression on average in time to visual completion and Speed Index. Overall page load time had decreased however, suggesting that we were benefiting from reduced connection latency.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/h2-slow-discover.png&quot; alt=&quot;filmstrip comparing HTTP/1.x and HTTP/2 page load performance&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;Delayed first paint, and visual completion times for HTTP/2&lt;/span&gt;&lt;/p&gt;
+
+&lt;h4&gt;High latency testing&lt;/h4&gt;
+
+&lt;p&gt;For gathering data on high latency connections we used &lt;a href=&quot;http://www.webpagetest.org/&quot;&gt;WebPagetest&lt;/a&gt; with a 3G connection profile.&lt;/p&gt;
+
+&lt;p&gt;Initial paints continued to be more complete, but happened noticeably later. The overall page load continued to occur earlier.&lt;/p&gt;
+
+&lt;p&gt;Counter–intuitively, visual completeness was negatively delayed by an average of 15% for Designer profiles and 25% for Discover respectively.&lt;/p&gt;
+
+&lt;h4&gt;TL;DR:&lt;/h4&gt;
+
+&lt;p&gt;For a typical image rich, latency–bound page using a high–speed, low–latency connection, visual completion was achieved 5% faster on average.&lt;/p&gt;
+
+&lt;p&gt;For an extremely image–heavy, bandwidth–bound page using the same connection, visual completion was achieved 5–10% slower on average.&lt;/p&gt;
+
+&lt;p&gt;On a high–latency, low–speed connection we saw significant delays for page to reach visual completion.&lt;/p&gt;
+
+&lt;p&gt;In all tests we saw overall page load times improved, and more complete initial paints.&lt;/p&gt;
+
+&lt;h2&gt;The postmortem&lt;/h2&gt;
+
+&lt;p&gt;The data collected left us with one big question&lt;/p&gt;
+
+&lt;blockquote class=&quot;blockquote&quot;&gt;
+  &lt;h3 class=&quot;heading heading--h3 heading--forrest-lyf&quot;&gt;
+    When using HTTP/2, our bandwidth-bound pages take significantly longer to reach visual completion despite loading faster. Why is this?
+  &lt;/h3&gt;
+&lt;/blockquote&gt;
+
+&lt;h4&gt;Hypothesis 1: network saturation&lt;/h4&gt;
+
+&lt;p&gt;HTTP/1.x traffic is bursty in nature due to opening many short-lived connections. This behavior is responsible for the &lt;em&gt;network waterfall&lt;/em&gt; seen in dev tools.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/h1-waterfall.png&quot; alt=&quot;HTTP/1.x staggered network waterfall&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;HTTP/1.x staggered network waterfall&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;Initially we thought a single, long lived TCP connection loading megabytes of image data could be starving bandwidth from loading layout blocking resources like CSS, JS or fonts.&lt;/p&gt;
+
+&lt;p&gt;However, the network waterfalls didn’t reveal any changes to the loading behavior of layout blocking resources.&lt;/p&gt;
+
+&lt;h4&gt;Hypothesis 2: altered loading priority&lt;/h4&gt;
+
+&lt;p&gt;When using HTTP/1.x, browsers have a limit of approximately six simultaneous open connections to an origin. As resources are discovered, they’re added to a FIFO resource download queue. Limiting the number of open connections to an origin creates an implicit loading priority of resources.&lt;/p&gt;
+
+&lt;p&gt;Each queued resource represents a request–response round trip to an origin that must be completed before the resource can leave the queue. This behavior is what we know as the network waterfall.&lt;/p&gt;
+
+&lt;p&gt;HTTP/2’s framing protocol lets the browser stitch together multiple requests and responses, so we lose the document order priority queue.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/h1-h2-waterfall.png&quot; alt=&quot;comparision between HTTP/1.x and HTTP/2 network waterfalls&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;Discover page network timeline for HTTP/1.x and HTTP/2&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;We considered that the HTTP/1.x best practice of putting &lt;code&gt;&amp;lt;script&amp;gt;&lt;/code&gt; at the end of the document could now be doing us harm.&lt;/p&gt;
+
+&lt;blockquote class=&quot;blockquote&quot;&gt;
+  &lt;h3 class=&quot;heading heading--h3 heading--forrest-lyf&quot;&gt;
+    Was everything we know about performance actually wrong?
+  &lt;/h3&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;However, comparable &lt;code&gt;DOMContentLoaded&lt;/code&gt; times ruled out that theory. Network waterfalls confirmed that layout block resources were being prioritized over images.&lt;/p&gt;
+
+&lt;p&gt;In practice, the resources in the browser’s download queue are prioritized. This is why starting 80 image requests before finding the &lt;code&gt;&amp;lt;script&amp;gt;&lt;/code&gt; at the bottom of the page doesn’t delay the loading of the script.&lt;/p&gt;
+
+&lt;p&gt;The exact loading behavior of resources is undocumented, unspecified, and constantly changes. However in most, if not all browsers, images have a lower priority than CSS, JavaScript and fonts.&lt;/p&gt;
+
+&lt;h4&gt;Hypothesis 3: the stream&lt;/h4&gt;
+
+&lt;p&gt;Without the simultaneous connection limit of HTTP/1.x, the browser was free to load all 80 images at once. The server would then respond to all those image requests simultaneously, and the browser will draw them as they finish downloading. We could confirm this behavior from the network timeline.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/h2-waterfall.png&quot; alt=&quot;HTTP/2 network waterfall for Discover images&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;Discover page HTTP/2 network timeline of the first 20 image requests&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;The images were still being requested in the document order. Smaller images, however, would finish downloading faster and were therefore rendered sooner. If a larger image happened to be in the initial viewport it would take longer to load, delaying the visual completion.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/http2/h1-prod.gif&quot; alt=&quot;gif of Discover page load with HTTP/1.x&quot;&gt;
+&lt;img src=&quot;/tech-blog/assets/images/http2/h2-prod.gif&quot; alt=&quot;gif of Discover page load with HTTP/2&quot;&gt;
+&lt;span class=&quot;attribution&quot;&gt;Comparing Discover HTTP/1.x vs HTTP/2 3G page load&lt;/span&gt;&lt;/p&gt;
+
+&lt;p&gt;This also explained why time to visual completion took longer as bandwidth got more constrained and had such large variances.&lt;/p&gt;
+
+&lt;h2&gt;The HTTP/2 fine print&lt;/h2&gt;
+
+&lt;p&gt;The problem we’re experiencing with the stream is actually a big feature of HTTP/2 that isn’t talked about much.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://twitter.com/igrigorik&quot;&gt;Ilya Grigorik&lt;/a&gt; said it best:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;“With HTTP/2 the browser relies on the server to deliver the response data in an optimal way.&lt;/p&gt;
+
+&lt;p&gt;It’s not just the number of bytes, or requests per second, but the order in which bytes are delivered. Test your HTTP/2 server very carefully”&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Traditionally resources were requested in document order with some heuristics added by browsers to improve performance. This approach has some big problems:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;the heuristics are undocumented&lt;/li&gt;
+&lt;li&gt;the heuristics differ between browsers&lt;/li&gt;
+&lt;li&gt;the heuristics differ between browser versions&lt;/li&gt;
+&lt;li&gt;the heuristics are general for all sites&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Changes to these heuristics would cause page performance to change suddenly, without warning.&lt;/p&gt;
+
+&lt;p&gt;HTTP/2 changed the landscape for resource prioritization — the responsibility is now shared between the browser and the server. The browser gives the server hints about priority but it’s the server that’s in charge of what order the bytes are delivered.&lt;/p&gt;
+
+&lt;blockquote class=&quot;blockquote&quot;&gt;
+  &lt;h3 class=&quot;heading heading--h3 heading--forrest-lyf&quot;&gt;
+    This power shift is a double-edged sword.
+  &lt;/h3&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Resource prioritization heuristics existing in both the server and the client can make the situation even more opaque and fragile. However, making the server authoritative opens avenues for putting developers in charge.&lt;/p&gt;
+
+&lt;h2&gt;Take aways&lt;/h2&gt;
+
+&lt;p&gt;Our investigation found that there is no such thing as free performance — something browser vendors have known for a long time.&lt;/p&gt;
+
+&lt;blockquote class=&quot;blockquote&quot;&gt;
+  &lt;h3 class=&quot;heading heading--h3 heading--forrest-lyf&quot;&gt;
+    The pursuit of web performance is one of tradeoffs and nuance.
+  &lt;/h3&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;In image–heavy pages like those we studied, the tipping point for preferring a multiplexed HTTP/2 connection over multiple HTTP/1.x connections is when latency approaches the average download time for the images. At the right mix of high latency and low bandwidth, we could see big wins with HTTP/2 for smaller images.&lt;/p&gt;
+
+&lt;p&gt;HTTP/2 implementations are young, and the surface area of the protocol is big:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;resource weighting prioritization&lt;/li&gt;
+&lt;li&gt;resource dependency prioritization&lt;/li&gt;
+&lt;li&gt;multiplexing heuristics&lt;/li&gt;
+&lt;li&gt;stream and connection flow control&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;We can expect to see tweaks, optimizations, and inevitably bugs at all these layers over the next couple of years. It’s important we understand the motivations and tradeoffs of new technology so we can accurately separate hype from value.&lt;/p&gt;
+
+&lt;h4&gt;A note on image optimization&lt;/h4&gt;
+
+&lt;p&gt;In the case of Discover, improved image optimization would undoubtedly decrease the time to visual completion for both HTTP/1 and HTTP/2 users. Whether HTTP/2 users would see a greater benefit is not clear cut. We also need to consider the effort and overhead of an addressing image optimization solution for our platform.&lt;/p&gt;
+
+&lt;p&gt;As a design marketplace the quality our images is a critical concern. We  take extreme care because image artifacts from poor or overzealous optimization negatively affect the user experience.&lt;/p&gt;
+
+&lt;p&gt;We frequently evaluate the trade–off between stack complexity, cost of processing high volumes of previews, and opportunity cost of other experience improvements for users. Currently edge caching and low–overhead delivery, such as HTTP/2, strike the right balance as we investigate suitable responsive solutions.&lt;/p&gt;
+
+&lt;h4&gt;Thanks&lt;/h4&gt;
+
+&lt;p&gt;&lt;em&gt;This post is made possible by technical editing by &lt;a href=&quot;https://twitter.com/andrew_k&quot;&gt;Andrew Krespanis&lt;/a&gt; and &lt;a href=&quot;https://twitter.com/benschwarz&quot;&gt;Ben Schwarz&lt;/a&gt;. Thank–you.&lt;/em&gt;&lt;/p&gt;
+</description>
+        <pubDate>Thu, 14 Jul 2016 00:00:00 +1000</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2016/07/14/real-world-http-2-400gb-of-images-per-day/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2016/07/14/real-world-http-2-400gb-of-images-per-day/</guid>
+        
+        
+        <category>Performance</category>
+        
+      </item>
+    
+      <item>
+        <title>Securing AWS Credentials on Engineer's Machines</title>
+        <description>&lt;p&gt;The on-demand nature of Amazon Web Services has changed how technology companies think about infrastructure. It lets early stage start-ups light up infrastructure at the same pace as they are growing and established businesses to easily transition between different infrastructure configurations with a few API commands. The downside of this is that if an attacker gains access to credentials with sufficient access, they can run up huge bills for nefarious purposes, (like bitcoin mining &lt;a href=&quot;http://techblog.realestate.com.au/protecting-your-aws-keys-with-credulous&quot;&gt;1&lt;/a&gt; &lt;a href=&quot;http://readwrite.com/2014/04/15/amazon-web-services-hack-bitcoin-miners-github&quot;&gt;2&lt;/a&gt;), or simply delete everything, as &lt;a href=&quot;http://www.darkreading.com/attacks-breaches/code-hosting-service-shuts-down-after-cyber-attack/d/d-id/1278743&quot;&gt;Code Spaces&lt;/a&gt; found out last year. Whilst one could argue that much of this would be mitigated with good security practice, or even just good backups, the daunting failure rate of startups makes the risk/reward temptingly low for deferring these efforts until the dollars flow in.&lt;/p&gt;
+
+&lt;p&gt;As we&amp;#39;ve grown 99designs from a small startup to over 150 people, we&amp;#39;ve gone through several of these inflection points where we have to rethink how we&amp;#39;ve approached engineering, and more recently how we approach security and our AWS infrastructure. We&amp;#39;ve been using AWS since it&amp;#39;s early betas in 2007, so we&amp;#39;ve regularly tried to apply best practice as they evolved, but we still had fairly rudimentary practices around how we approached credentials. We set out to figure out what the risks were and how we might mitigate them without introducing too much extra complexity.&lt;/p&gt;
+
+&lt;h2&gt;Threat Models&lt;/h2&gt;
+
+&lt;p&gt;In our estimation, the most likely attacks vectors were focused around four themes:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Stolen or misplaced engineer&amp;#39;s laptops with credentials on them&lt;/li&gt;
+&lt;li&gt;Malware on engineer laptops that steal credentials&lt;/li&gt;
+&lt;li&gt;Accidentally published AWS credentials on Github or elsewhere&lt;/li&gt;
+&lt;li&gt;Ex-employees who haven&amp;#39;t had credentials revoked&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;I&amp;#39;m certain this isn&amp;#39;t an exhaustive list and we&amp;#39;ll be working to update this over time as new vectors are discovered. We arrived at a number of high-level mitigations that we wanted to apply:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Each team should have their own AWS account, with limited cross-account privileges. Principle of least privilege should be applied where practical.&lt;/li&gt;
+&lt;li&gt;User creation/removal should be centrally managed and audited regularly, with keys regularly rotated.&lt;/li&gt;
+&lt;li&gt;A second factor that isn&amp;#39;t stored on the laptop should be required for security sensitive operations.&lt;/li&gt;
+&lt;li&gt;AWS Credentials should never be stored at rest in plaintext, or ideally even in memory.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;These mitigations largely address #1 and #2, which we felt were the largest risks, but they also reduced the scope of what was possible with #3 and #4.&lt;/p&gt;
+
+&lt;h2&gt;AWS Building Blocks&lt;/h2&gt;
+
+&lt;p&gt;Amazon provides a variety of tools for managing users and permissions, namely &lt;a href=&quot;https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction_identity-management.html&quot;&gt;Identity and Access Management&lt;/a&gt; (IAM). An overview of what these offer is beyond the scope of this post, but at a high level they allow multiple users to be created within groups, each with granular access policies. They also offer &lt;a href=&quot;https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html&quot;&gt;IAM Roles&lt;/a&gt;, which can be assumed by users to access certain things, like one would use &lt;code&gt;sudo&lt;/code&gt; in a linux system. Roles can be given access to other Amazon accounts via &lt;a href=&quot;https://docs.aws.amazon.com/IAM/latest/UserGuide/walkthru_cross-account-with-roles.html&quot;&gt;cross-account role delegation&lt;/a&gt;. IAM accounts and Roles can have &lt;a href=&quot;https://aws.amazon.com/iam/details/mfa/&quot;&gt;Multi-Factor Authentication&lt;/a&gt; (MFA) devices associated with them, with permissions conditional on the entry of a time-based code.&lt;/p&gt;
+
+&lt;p&gt;The other key building block is Amazon&amp;#39;s &lt;a href=&quot;https://docs.aws.amazon.com/STS/latest/APIReference/Welcome.html&quot;&gt;Security Token Service&lt;/a&gt; (STS), which generates temporary credentials. The general work flow that STS uses is to create a time-limited authentication &amp;quot;&lt;a href=&quot;https://docs.aws.amazon.com/STS/latest/APIReference/API_GetSessionToken.html&quot;&gt;session&lt;/a&gt;&amp;quot;, which is then used for subsequent operations, such as &lt;a href=&quot;https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html&quot;&gt;&lt;code&gt;AssumeRole&lt;/code&gt;&lt;/a&gt;, or whatever other AWS API calls that the original user had permissions to call.&lt;/p&gt;
+
+&lt;h2&gt;Separating concerns into different AWS accounts&lt;/h2&gt;
+
+&lt;p&gt;Our first step was to address our single monolithic AWS account by splitting it into multiple accounts and using a Bastion account with all our developers in it and role-based delegation into all the other accounts. This excellent post &amp;quot;&lt;a href=&quot;https://cloudonaut.io/your-single-aws-account-is-a-serious-risk/&quot;&gt;Your single AWS account is a serious risk&lt;/a&gt;&amp;quot; explains the thought process leading up to this. The advantage to this approach is that we could still give teams admin access to their entire sub-account, but limit access to other teams accounts on a more granular basis. Immediately this strategy limits the amount of damage one set of admin credentials can do, either by accident or if leaked.&lt;/p&gt;
+
+&lt;p&gt;After the split, we have 11 different AWS accounts, split across 30 engineers. We looked at a variety of ways of automating configuration management for setting up the trust relationships and permissions. We ended up building a tool called &lt;a href=&quot;https://github.com/99designs/iamy&quot;&gt;IAMy&lt;/a&gt; that allows for all our AWS permissions and IAM configuration to be represented as a git-managed repository of YAML files, which suits our philosophy of &amp;quot;Infrastructure as code&amp;quot;. We use &lt;a href=&quot;https://www.bitium.com/&quot;&gt;Bitium for SAML-based delegation&lt;/a&gt; elsewhere, but until we are at a larger scale, the benefits of the more granular control (particularly around security assertions based on MFA tokens) that hand-rolled IAM config provided outweighed the ease of management of a more sophisticated &lt;a href=&quot;https://en.wikipedia.org/wiki/Identity_provider&quot;&gt;Identity Provider&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;We&amp;#39;ll address the above in more detail in a subsequent post, once we&amp;#39;ve had some time to observe it &amp;quot;in the wild&amp;quot;.&lt;/p&gt;
+
+&lt;h2&gt;Securing credentials on developer machines&lt;/h2&gt;
+
+&lt;p&gt;Our biggest concern with the above changes was the complexity this introduced for developers. Thankfully AWS&amp;#39;s CLI tools and SDK&amp;#39;s have improved in leaps and bounds over the years and offer a lot of options to simplify exactly this architecture. Developers could use their IAM credentials to assume role&amp;#39;s on each of the different accounts either in CLI tools or via the AWS Web Console.&lt;/p&gt;
+
+&lt;p&gt;Physical access to credentials is somewhat mitigated for us as we required disk encryption for all laptops, which means that provided a strong password is used and the computer has locked before it&amp;#39;s accessed, it&amp;#39;s harder to lift credentials from a stolen laptop. We were more concerned about malware stealing credentials from disk.&lt;/p&gt;
+
+&lt;p&gt;We looked at a variety of existing solutions, including REA&amp;#39;s &lt;a href=&quot;https://github.com/realestate-com-au/credulous&quot;&gt;credulous&lt;/a&gt; (which I&amp;#39;m told is no longer in use) and AdRoll&amp;#39;s &lt;a href=&quot;https://github.com/AdRoll/hologram&quot;&gt;hologram&lt;/a&gt;, but none of the tools provided the right balance of security we wanted.&lt;/p&gt;
+
+&lt;p&gt;The key requirements from our point of view (and the &lt;a href=&quot;https://docs.aws.amazon.com/general/latest/gr/aws-access-keys-best-practices.html&quot;&gt;AWS Security Credentials Best Practices&lt;/a&gt;) were:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;IAM credentials should never be exposed to third-party code&lt;/li&gt;
+&lt;li&gt;Temporary security credentials should be generated for all operations&lt;/li&gt;
+&lt;li&gt;MFA should be required as frequently as is pragmatic&lt;/li&gt;
+&lt;li&gt;The user experience should be as close to the previous approach of storing creds in &lt;code&gt;~/.aws/credentials&lt;/code&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2&gt;Introducing AWS Vault&lt;/h2&gt;
+
+&lt;p&gt;As most of our engineers use OS X as their primary operating system, we looked to OS X&amp;#39;s Keychain to store credentials at rest. Many of us had been using &lt;a href=&quot;https://twitter.com/pda&quot;&gt;pda&lt;/a&gt;&amp;#39;s &lt;a href=&quot;https://github.com/pda/aws-keychain&quot;&gt;aws-keychain&lt;/a&gt;, so we wanted something that was just as easy to use.&lt;/p&gt;
+
+&lt;p&gt;The tool we ended up creating is called &lt;a href=&quot;https://github.com/99designs/aws-vault&quot;&gt;&lt;code&gt;aws-vault&lt;/code&gt;&lt;/a&gt; and is written in &lt;a href=&quot;https://golang.org/&quot;&gt;Go&lt;/a&gt; (which we are huge fans of at 99designs), with native bindings to OS X&amp;#39;s Keychain and Linux&amp;#39;s Kwallet (Windows support coming soon). It reads the same configuration file that the &lt;code&gt;aws-cli&lt;/code&gt; tool does, so allows for nice progressive enhancement over the standard features that &lt;code&gt;aws-cli&lt;/code&gt; offers around role switching and MFA.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;&lt;span class=&quot;gp&quot;&gt;$ &lt;/span&gt;cat ~/.aws/config
+
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;profile 99designs]
+region &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; us-east-1
+
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;profile contests]
+region &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; us-east-1
+source_profile &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 99designs
+role_arn &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; arn:aws:iam::123456789:role/ReadOnly
+
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;profile contests-admin]
+region &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; us-east-1
+source_profile &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; 99designs
+role_arn &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; arn:aws:iam::123456789:role/Administrator
+mfa_serial &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; arn:aws:iam::123456789:mfa/lachlan
+
+&lt;span class=&quot;gp&quot;&gt;$ &lt;/span&gt;aws-vault add 99designs
+Enter Access Key Id: ABDCDEFDASDASF
+Enter Secret Key: %
+
+&lt;span class=&quot;c&quot;&gt;# Assume a read-only role&lt;/span&gt;
+&lt;span class=&quot;gp&quot;&gt;$ &lt;/span&gt;aws-vault &lt;span class=&quot;nb&quot;&gt;exec &lt;/span&gt;contests -- aws s3 ls
+bucket_1
+bucket_2
+
+&lt;span class=&quot;c&quot;&gt;# Assume an admin role for writes&lt;/span&gt;
+&lt;span class=&quot;gp&quot;&gt;$ &lt;/span&gt;aws-vault &lt;span class=&quot;nb&quot;&gt;exec &lt;/span&gt;contests-admin -- aws s3 cp llamas.jpg s3://testbucket
+Enter token &lt;span class=&quot;k&quot;&gt;for &lt;/span&gt;arn:aws:iam::123456789:mfa/lachlan: 123456
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;By default, there is a dedicated Keychain for AWS credentials and Keychain prompts you when credentials are accessed:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;http://lachlan.me/s/5GkVm.png&quot; alt=&quot;Access Dialog&quot;&gt;&lt;/p&gt;
+
+&lt;p&gt;Beyond the strong storage-at-rest, &lt;code&gt;aws-vault&lt;/code&gt; generates short-lived session-based credentials to expose to sub-processes and it encourages you to use the tool to run other tools, rather than exporting credentials to your environment. This means that &lt;a href=&quot;https://github.com/joho/aws-pony&quot;&gt;rogue node.js packages&lt;/a&gt; have a harder time obtaining your credentials, and when they do, are limited to the lifetime of the session.&lt;/p&gt;
+
+&lt;p&gt;It&amp;#39;s a binary and very easy to install and incorporate in your day-to-day usage. &lt;a href=&quot;https://github.com/99designs/aws-vault&quot;&gt;Give it a try&lt;/a&gt; and &lt;a href=&quot;https://github.com/99designs/aws-vault/issues&quot;&gt;let us know how we can improve it&lt;/a&gt;. We&amp;#39;re currently looking for security professionals to conduct a more formal audit, if that might apply to you, please &lt;a href=&quot;mailto:lachlan@99designs.com&quot;&gt;get in touch&lt;/a&gt;!&lt;/p&gt;
+</description>
+        <pubDate>Mon, 26 Oct 2015 00:00:00 +1100</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2015/10/26/aws-vault/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2015/10/26/aws-vault/</guid>
+        
+        
+        <category>AWS</category>
+        
+      </item>
+    
+      <item>
+        <title>Book Club for Tech Leads</title>
+        <description>&lt;p&gt;For the past 18 months at 99designs we&amp;#39;ve been running a book club for our tech leads. What started as an ad-hoc process to jump start quality in our code review has grown into the key component of our senior staff development.&lt;/p&gt;
+
+&lt;p&gt;I chose a book club because as a largely self taught dev manager books were where I developed all my foundational skills. I thought that in trying to scale out those skills across a broader team the natural shortcut would just be to get the new tech leads to read the same books, rather than just have me regurgitate them in 1:1 meetings.&lt;/p&gt;
+
+&lt;p&gt;In this post I&amp;#39;ll just quickly explain how we do it, which books we&amp;#39;ve done to date and why, some books we&amp;#39;re aiming to do, and share some general thoughts on the process.&lt;/p&gt;
+
+&lt;h2&gt;How it Works&lt;/h2&gt;
+
+&lt;p&gt;The tech leads here have a fortnightly scheduled catchup where we review ongoing work, discuss any inter-team issues, and the CTO and I hand out high level guidance.&lt;/p&gt;
+
+&lt;p&gt;These meetings have a standing agenda item of &amp;quot;review book club chapters&amp;quot; where we discuss the chapters set for review. There&amp;#39;s nothing fancy about the format, we go around the circle and each tech lead speaks to what they found of interest in those chapters, ideally tying it back to things that we&amp;#39;ve done before at 99designs to make the ideas a bit more concrete. As the facilitator I&amp;#39;ll usually go last and point out any interesting ideas that may have been passed over, and to try and tie back what we&amp;#39;ve learned to the higher level direction the CTO has set if possible.&lt;/p&gt;
+
+&lt;p&gt;We aim to review two to three chapters each meeting, which works out to roughly 30 pages. While 30 pages isn&amp;#39;t a lot to read, it is a lot to talk about (and if you&amp;#39;re reading something that doesn&amp;#39;t give you much to talk about in 30 pages, you probably need to be reading something better).&lt;/p&gt;
+
+&lt;p&gt;At one point we tried to increase the pace we were getting through the books, but we discovered an inverse correlation between the number of chapters read and the quality of discussion. Once the quality of discussion dropped off, the motivation to participate in those discussions also dropped off, which then finally lead to fewer people doing the reading.&lt;/p&gt;
+
+&lt;h2&gt;What We&amp;#39;ve Read&lt;/h2&gt;
+
+&lt;h3&gt;Clean Code&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://www.amazon.com/Clean-Code-Handbook-Software-Craftsmanship/dp/0132350882&quot;&gt;Clean Code by Bob Martin&lt;/a&gt; was our first book. I chose this book to start us off for a couple of reasons.&lt;/p&gt;
+
+&lt;p&gt;The first was that I wanted to open with something technical to help ease the transition from engineer to manager for everyone in the group as for most of our tech leads the promotion was quite fresh and I didn&amp;#39;t need to scare any of them off.&lt;/p&gt;
+
+&lt;p&gt;The second was that we needed to build up a common vocabulary for what good code looked like. As a polyglot shop we&amp;#39;ve got a lot of variety in programming background and style. That diversity has been a great boon in the quality and quantity of new ideas our team gets exposed to, but the cost of cohesion in our architectural style.&lt;/p&gt;
+
+&lt;p&gt;We used clean code to get alignment between the leads on definitions, which then provided the base for us to agree which principles of clean code we should be applying day-to-day in code review and system design.&lt;/p&gt;
+
+&lt;h3&gt;High Output Management&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://www.amazon.com/High-Output-Management-Andrew-Grove/dp/0679762884&quot;&gt;High Output Management by Andrew Grove&lt;/a&gt; was our second book, and the first management themed one. I&amp;#39;d decided the next step in training our team leads was to build up an idea of middle management from first principles.&lt;/p&gt;
+
+&lt;p&gt;If you&amp;#39;re new to management and don&amp;#39;t understand the nuts and bolts of your new day-to-day activities this book is a great go-to. It covers performance reviews, 1:1 meetings, measuring unmeasurable things, planning, meetings, training, and everything else.&lt;/p&gt;
+
+&lt;p&gt;While originally written in 1983 it holds up really well. Fans of Spotify&amp;#39;s guild&amp;#39;s and tribes model will find it eerily foreshadowed in the chapter on matrix management.&lt;/p&gt;
+
+&lt;h3&gt;Release It!&lt;/h3&gt;
+
+&lt;p&gt;We&amp;#39;re back to a technical book with &lt;a href=&quot;https://pragprog.com/book/mnee/release-it&quot;&gt;Release It! by Michael Nygard&lt;/a&gt;. In a pure engineering sense there are two things that make a good system: ongoing changes to the system are cost-effective, and the system keeps doing what it&amp;#39;s built for without too much care. Clean Code gives a good foundation for the first, but doesn&amp;#39;t speak very well to the second. Release It (for me) is the definitive guide to designing web apps that stay up.&lt;/p&gt;
+
+&lt;p&gt;99designs has always been pretty good at the reliability aspect of software engineering, so the main benefit of this read through was putting names to practices that had organically grown here. The other helpful part of this book was around capacity planning. As a fast growing startup it&amp;#39;s too easy to be purely reactive - release it can give you a pretty useful framework to get back in front of the scaling curve.&lt;/p&gt;
+
+&lt;p&gt;If Michael Nygard ever sees this: please, please write a &amp;quot;post-cloud and post-JVM&amp;quot; second edition. A lot of what&amp;#39;s in the book is timeless, but a bunch of chapters have not aged well.&lt;/p&gt;
+
+&lt;h3&gt;Making Things Happen&lt;/h3&gt;
+
+&lt;p&gt;Back onto the management track with &lt;a href=&quot;http://www.amazon.com/Making-Things-Happen-Mastering-Management/dp/0596517718&quot;&gt;Making Things Happen by Scott Berkun&lt;/a&gt;. With our tech leads largely on top of managing the purer engineering elements of their work, the next step is doing all that to a schedule.&lt;/p&gt;
+
+&lt;p&gt;As our product offerings become more and more integrated the art (s) of project management: requirements negotiation, stakeholder management, and schedule alignment become more and more important to keeping our pace of development high. Scott&amp;#39;s book provides a no-nonsense, approachable, and pragmatic guide to humane product management. As such, it&amp;#39;s an excellent intro for the most reluctant project managers of all - former engineers!&lt;/p&gt;
+
+&lt;h2&gt;Future Books&lt;/h2&gt;
+
+&lt;h3&gt;POODR&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://www.poodr.com/&quot;&gt;Practical Object-Oriented Design in Ruby&lt;/a&gt; is probably my favourite book on software design to date. It does a great job of explaining OO principles and has a strong focus on design as an iterative process rather than achievable end state. The only reason I usually recommend Clean Code before this is that Clean Code is a bit easier to mechanically apply to code review. To me Clean Code stops you from making a mess of your system, and POODR helps you create new opportunities in your code.&lt;/p&gt;
+
+&lt;h3&gt;Essential Drucker&lt;/h3&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://www.amazon.com/Essential-Drucker-Druckers-Management-Essentials/dp/0061345016/&quot;&gt;The Essential Drucker&lt;/a&gt; is not quite as useful as High Output Management for giving a framework for management, but chock-full of useful bits to do with the day-to-day of management. Will be good for rounding out what the tech leads have learned so far, and also goes to show how many &amp;quot;modern&amp;quot; ideas of management aren&amp;#39;t that modern.&lt;/p&gt;
+
+&lt;h3&gt;Making Software&lt;/h3&gt;
+
+&lt;p&gt;It&amp;#39;ll be a toss up between &lt;a href=&quot;http://www.amazon.com/Making-Software-Really-Works-Believe/dp/0596808321&quot;&gt;Making Software&lt;/a&gt; and &lt;a href=&quot;http://www.amazon.com/Facts-Fallacies-Software-Engineering-Robert/dp/0321117425/&quot;&gt;Facts and Fallacies of Software Engineering&lt;/a&gt;. Either way, this round will be about empiricism in software engineering.&lt;/p&gt;
+
+&lt;h2&gt;Closing Thoughts&lt;/h2&gt;
+
+&lt;p&gt;When starting the book club I genuinely, but mistakenly, believed that if I can get everyone to read the books I&amp;#39;ve read we&amp;#39;ll have 100% agreement on how to build software and we&amp;#39;ll get alignment for free. That is not what happened.&lt;/p&gt;
+
+&lt;p&gt;What happened for me, running the team and the bookclub, is that I got to take a bunch of people with different backgrounds and skills that I didn&amp;#39;t know very well onto my home turf - books. By using the books as a kind of common ground it let me understand everyone&amp;#39;s individual perspectives in sharper relief.&lt;/p&gt;
+
+&lt;p&gt;What happened for the tech leads? They read some good books, learned some new tricks, and I hope got a better understanding of perspective as an engineering manager from the source of all my own training.&lt;/p&gt;
+
+&lt;p&gt;Since instituting the book club amongst the tech leads we&amp;#39;ve also had some trickle down benefits. Some of the product teams run their own bookclubs, and there are a couple of cross-team opt in book clubs too, the most notable being our &lt;a href=&quot;https://facebook.github.io/react/&quot;&gt;React&lt;/a&gt; article-club. I&amp;#39;d strongly recommend starting one yourself.&lt;/p&gt;
+</description>
+        <pubDate>Tue, 08 Sep 2015 00:00:00 +1000</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2015/09/08/book-club/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2015/09/08/book-club/</guid>
+        
+        
+        <category>management</category>
+        
+      </item>
+    
+      <item>
+        <title>Getting started with the 'Add to Slack' button</title>
+        <description>&lt;p&gt;Slack has just released their new &lt;a href=&quot;http://slackhq.com/post/127498327415/addtoslack&quot;&gt;&amp;#39;Add to Slack&amp;#39; button&lt;/a&gt; that&amp;#39;s designed to
+make it super easy to install addons into your Slack channels.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://99designs.com/tasks/add-to-slack/&quot;&gt;&lt;img alt=&quot;Add to Slack&quot; src=&quot;/tech-blog/assets/images/add-to-slack/add-to-slack-button.png&quot; width=&quot;278&quot; height=&quot;80&quot; class=&quot;noborder&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;Slack invited us to their early-access beta and we&amp;#39;ve successfully integrated this into our &lt;a href=&quot;https://99designs.com/tasks/&quot;&gt;99designs Tasks&lt;/a&gt; product.&lt;/p&gt;
+
+&lt;p&gt;Interested in developing your own Slack integration? We&amp;#39;ll walk you through what to do.&lt;/p&gt;
+
+&lt;h2&gt;Why use the &amp;#39;Add to Slack&amp;#39; feature?&lt;/h2&gt;
+
+&lt;p&gt;The strength of the &amp;#39;Add to Slack&amp;#39; button is how simple it makes the installation of third party Slack addons.
+Installing these addons previously involved some awkward copy/pasting of API tokens and strange looking webhook URLs&amp;mdash;not anymore!&lt;/p&gt;
+
+&lt;p&gt;The only downside is that the feature set is currently limited to posting messages to a single channel.
+We&amp;#39;re hoping this will expand to include some of the features we use in our more comprehensive &lt;a href=&quot;https://github.com/99designs/tasks-slack-bot&quot;&gt;Tasks Slack bot&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h2&gt;Getting started&lt;/h2&gt;
+
+&lt;p&gt;The &amp;#39;Add to Slack&amp;#39; button uses Slack&amp;#39;s &lt;a href=&quot;https://api.slack.com/docs/oauth&quot;&gt;OAuth2 API&lt;/a&gt;. &lt;a href=&quot;http://oauth.net/2/&quot;&gt;OAuth2&lt;/a&gt; is a protocol that lets your application request access
+to a user&amp;#39;s Slack account without needing their password.&lt;/p&gt;
+
+&lt;p&gt;Let&amp;#39;s run through the basic flow.&lt;/p&gt;
+
+&lt;h3&gt;Step 1: Register your application&lt;/h3&gt;
+
+&lt;p&gt;The first thing you will need to do is &lt;a href=&quot;https://api.slack.com/applications/new&quot;&gt;register your application with Slack&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://api.slack.com/applications/new&quot;&gt;&lt;img alt=&quot;Register application&quot; src=&quot;/tech-blog/assets/images/add-to-slack/register-app.png&quot; width=&quot;500&quot; height=&quot;365&quot; class=&quot;noborder&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Don&amp;#39;t worry if you don&amp;#39;t have all the details just yet, you can fill in the blanks later.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Once you&amp;#39;ve registered your application, you&amp;#39;ll get a &lt;code&gt;Client ID&lt;/code&gt; and &lt;code&gt;Client Secret&lt;/code&gt; for your application.
+You&amp;#39;ll need these a little bit later.&lt;/p&gt;
+
+&lt;h3&gt;Step 2: Place the &amp;#39;Add to Slack&amp;#39; button on your website&lt;/h3&gt;
+
+&lt;p&gt;Slack provides a code snippet in their &lt;a href=&quot;https://api.slack.com/docs/slack-button&quot;&gt;Slack button documentation&lt;/a&gt; that can be copy pasted into your website.&lt;/p&gt;
+
+&lt;p&gt;If you look closer at this snippet, the important part is that your application should link to &lt;code&gt;https://slack.com/oauth/authorize&lt;/code&gt; with the following parameters:&lt;/p&gt;
+
+&lt;table style=&quot;margin: 30px 0;&quot;&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;client_id&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&amp;nbsp;&amp;nbsp;Client ID of your registered Slack application.&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;scope&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&amp;nbsp;&amp;nbsp;Must be &lt;code&gt;incoming-webhook&lt;/code&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;state&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&amp;nbsp;&amp;nbsp;Unique string that's passed back upon completion (optional, but recommended)&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://99designs.com/tasks/add-to-slack/&quot;&gt;&lt;img alt=&quot;Click 'Add to Slack' button&quot; src=&quot;/tech-blog/assets/images/add-to-slack/click-add-to-slack-button.png&quot; width=&quot;500&quot; height=&quot;365&quot; class=&quot;noborder&quot; /&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Pro tip:&lt;/strong&gt; Slack recommends using the &lt;code&gt;state&lt;/code&gt; parameter to avoid forgery attacks. We use the &lt;a href=&quot;https://en.wikipedia.org/wiki/Hash-based_message_authentication_code&quot;&gt;HMAC&lt;/a&gt; encryption algorithm
+using a combination of the 99designs user ID and a secret value to generate a digital signature.
+This signature lets us verify the user is the same when they&amp;#39;re redirected back to our website later.&lt;/p&gt;
+
+&lt;h3&gt;Step 3: User clicks button and authorizes access to Slack&lt;/h3&gt;
+
+&lt;p&gt;Now that the button is on your website, users can click the button and will be asked
+to authorize access to their Slack account. They&amp;#39;ll also be able to choose a channel for messages to be posted to.&lt;/p&gt;
+
+&lt;p&gt;&lt;img alt=&quot;Authorize Slack access&quot; src=&quot;/tech-blog/assets/images/add-to-slack/authorize-slack-oauth.png&quot; width=&quot;500&quot; height=&quot;365&quot; class=&quot;noborder&quot; /&gt;&lt;/p&gt;
+
+&lt;h3&gt;Step 4: Slack redirects back to your application&lt;/h3&gt;
+
+&lt;p&gt;Once the user has clicked Authorize, they will be redirected back to your application&amp;#39;s configured redirect URL
+with an extra &lt;code&gt;code&lt;/code&gt; query string parameter.&lt;/p&gt;
+
+&lt;p&gt;This &lt;code&gt;code&lt;/code&gt; parameter is a single use code that can be used to request a more permanent Slack API token and webhook URL.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;&lt;strong&gt;Note:&lt;/strong&gt; If you passed a &lt;code&gt;state&lt;/code&gt; parameter earlier, it is passed back at this point too.
+Use it to verify the user is still the same one that clicked the button in the first place.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Request the Slack API token and webhook URL by making a http POST request in your server code to &lt;code&gt;https://slack.com/api/oauth.access&lt;/code&gt; with these parameters:&lt;/p&gt;
+
+&lt;table style=&quot;margin: 30px 0;&quot;&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;client_id&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&amp;nbsp;&amp;nbsp;Client ID of your registered Slack application.&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;client_secret&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&amp;nbsp;&amp;nbsp;Client Secret of your registered Slack application.&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;code&gt;code&lt;/code&gt;&lt;/td&gt;&lt;td&gt;&amp;nbsp;&amp;nbsp;The code returned by Slack in the query string parameter.&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;&lt;em&gt;Refer to the &lt;a href=&quot;https://api.slack.com/methods/oauth.access&quot;&gt;Slack oauth.access API docs&lt;/a&gt; for more details.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img alt=&quot;Use code to request Slack API token&quot; src=&quot;/tech-blog/assets/images/add-to-slack/oauth-code-api-token.png&quot; width=&quot;500&quot; height=&quot;365&quot; class=&quot;noborder&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This request will return a JSON response with a more permanent Slack API token and a webhook URL for posting notifications into
+the channel of the user&amp;#39;s choice.&lt;/p&gt;
+
+&lt;p&gt;You&amp;#39;ll need to store these details in your database for later use.&lt;/p&gt;
+
+&lt;p&gt;We&amp;#39;d also recommend requesting a few more details about the Slack user using the &lt;a href=&quot;https://api.slack.com/methods/auth.test&quot;&gt;Slack auth.test API&lt;/a&gt;.
+Knowing the user&amp;#39;s Slack username can help your application properly @mention the user in Slack messages.&lt;/p&gt;
+
+&lt;h3&gt;Step 5: Call webhook when something happens&lt;/h3&gt;
+
+&lt;p&gt;At this point, you have a webhook URL saved in your database that can be used to post messages to Slack.
+Aim to keep your messages useful, relevant and as informative as possible&amp;mdash;try not to overwhelm them with too much!&lt;/p&gt;
+
+&lt;p&gt;We started by replicating our email notifications as messages through Slack.&lt;/p&gt;
+
+&lt;p&gt;To send a message via webhook, make a http POST request to the webhook URL with a JSON string as the request body.
+A simple message might look like this:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-javascript&quot; data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;text&quot;&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;Something happened: &amp;lt;https://99designs.com/tasks/|Click here&amp;gt; for details.&quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;img alt=&quot;Example plain Slack notifications&quot; src=&quot;/tech-blog/assets/images/add-to-slack/plain-notification.png&quot; width=&quot;366&quot; height=&quot;67&quot; class=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Check out the &lt;a href=&quot;https://api.slack.com/incoming-webhooks&quot;&gt;Slack&amp;nbsp;API&amp;nbsp;docs&lt;/a&gt; for more details on what&amp;#39;s possible with webhook messages.&lt;/p&gt;
+
+&lt;h3&gt;Step 6: Adding some style&lt;/h3&gt;
+
+&lt;p&gt;Slack provides a variety of &lt;a href=&quot;https://api.slack.com/docs/formatting&quot;&gt;formatting options&lt;/a&gt; for changing the appearance of text, adding links as well as
+options for &lt;a href=&quot;https://api.slack.com/docs/attachments&quot;&gt;richly formatted messages&lt;/a&gt; with file attachments, image previews and border colors.&lt;/p&gt;
+
+&lt;p&gt;&lt;img alt=&quot;Example Slack notifications&quot; src=&quot;/tech-blog/assets/images/add-to-slack/slack-notifications.png&quot; width=&quot;631&quot; height=&quot;234&quot; class=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;h2&gt;Thank you Slack!&lt;/h2&gt;
+
+&lt;p&gt;We wanted to say a big thank you to the Slack team for their fantastic work on the &amp;#39;Add to Slack&amp;#39; button.
+It was great to be part of their beta program and we can&amp;#39;t wait to see what&amp;#39;s coming next.&lt;/p&gt;
+</description>
+        <pubDate>Wed, 26 Aug 2015 00:00:00 +1000</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2015/08/26/add-to-slack-button/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2015/08/26/add-to-slack-button/</guid>
+        
+        
+        <category>dev</category>
+        
+        <category>slack</category>
+        
+      </item>
+    
+      <item>
+        <title>Giving Our Beanstalkd Queue a Unix Interface with Go</title>
+        <description>&lt;blockquote&gt;
+&lt;p&gt;The workers are on fire again.
+— Us, every day, before cmdstalk.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h2&gt;beanstalkd, PHP workers, fires&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://99designs.com/&quot;&gt;99designs&lt;/a&gt; pushes four million background jobs through &lt;a href=&quot;http://kr.github.io/beanstalkd/&quot;&gt;beanstalkd&lt;/a&gt; each day.
+&lt;a href=&quot;http://kr.github.io/beanstalkd/&quot;&gt;beanstalkd&lt;/a&gt; is a fantastic job queue which we&amp;#39;ve used for more than five
+years, via the &lt;a href=&quot;https://github.com/pda/pheanstalk&quot;&gt;pheanstalk&lt;/a&gt; client which I wrote in 2008.&lt;/p&gt;
+
+&lt;p&gt;Each beanstalkd job has a &lt;abbr title=&quot;Time To Run (beanstalkd)&quot;&gt;TTR&lt;/abbr&gt;; a
+timer which counts down during job processing.  If TTR seconds elapse before
+the worker finishes the job, beanstalkd assumes the worker is dead and releases
+the job.  Another one of our worker takes the job, despite the original worker
+still churning away.  Each iteration of this results in greater load and less
+chance of this or any other job finishing. Eventually all the worker processes
+are stuck, and everything &lt;a href=&quot;http://www.salon.com/2013/08/22/according_to_the_dictionary_literally_now_also_means_figuratively_newscred/&quot;&gt;literally&lt;/a&gt; catches fire.&lt;/p&gt;
+
+&lt;p&gt;That&amp;#39;s what happened when we began pushing &lt;a href=&quot;http://www.imagemagick.org/&quot;&gt;ImageMagick&lt;/a&gt; and &lt;a href=&quot;http://www.ghostscript.com/&quot;&gt;GhostScript&lt;/a&gt; jobs
+to rasterize graphics.  Some pathological EPS files took longer than the 600
+second TTR, causing worker resource starvation.&lt;/p&gt;
+
+&lt;p&gt;Increasing the TTR would mitigate the issue, but these EPS files seem subject
+to the &lt;a href=&quot;http://en.wikipedia.org/wiki/Halting_problem&quot;&gt;halting problem&lt;/a&gt;. That leaves workers vulnerable to slow job
+saturation.&lt;/p&gt;
+
+&lt;p&gt;Interrupting the image operation when the job hits its TTR would be a better
+solution.  But workers need concurrency to watch the TTR during the job.  PHP
+doesn&amp;#39;t do threads, except via &lt;a href=&quot;http://www.php.net//manual/en/class.thread.php&quot;&gt;an extension&lt;/a&gt; that I&amp;#39;m disinclined
+to use.  Using &lt;a href=&quot;http://php.net/manual/en/function.pcntl-fork.php&quot;&gt;fork()&lt;/a&gt; would introduce &lt;a href=&quot;http://en.wikipedia.org/wiki/Inter-process_communication&quot;&gt;IPC&lt;/a&gt; / signal handling
+complexity, and prevent processes sharing the beanstalkd connection.  PHP feels
+like the wrong language to attack the problem.&lt;/p&gt;
+
+&lt;h2&gt;cmdstalk&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://twitter.com/lox&quot;&gt;Lachlan&lt;/a&gt; and I decided we could kill N birds with a single stone.  One:
+solve the queue fires.  Two: move another piece of our production
+infrastructure to Go.  Three: provide a beanstalkd layer which our PHP, Ruby
+and Go apps could all use.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://github.com/99designs/cmdstalk&quot;&gt;cmdstalk&lt;/a&gt; set out to harness the beanstalkd semantics we like on one end, and
+talk standard unix processes on the other.  This allows us to write workers in
+any language.  Here&amp;#39;s the basic model:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Connect to a beanstalkd server, &lt;abbr title=&quot;subscribe to&quot;&gt;watch&lt;/abbr&gt; one
+or more &lt;abbr title=&quot;queues / subjects&quot;&gt;tubes&lt;/abbr&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;http://en.wikipedia.org/wiki/Pipeline_(Unix)&quot;&gt;Pipe&lt;/a&gt; each job payload to a command specified by &lt;code&gt;cmdstalk --cmd=…&lt;/code&gt; argument.&lt;/li&gt;
+&lt;li&gt;If the subprocess exits 0, delete the job; done.&lt;/li&gt;
+&lt;li&gt;If the subprocess exits non-zero, release the job for retry (with backoff).&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;If TTR elapses, kill the subprocess and bury the bad job.&lt;/strong&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Anything that can read &lt;code&gt;stdin&lt;/code&gt; and &lt;code&gt;exit(int)&lt;/code&gt; can be a cmdstalk worker — no
+need for beanstalkd knowledge.&lt;/p&gt;
+
+&lt;p&gt;Check out the &lt;a href=&quot;https://github.com/99designs/cmdstalk&quot;&gt;source on GitHub&lt;/a&gt;, the &lt;a href=&quot;http://godoc.org/github.com/99designs/cmdstalk&quot;&gt;docs at godoc.org&lt;/a&gt;,
+or just the usage summary:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-&quot; data-lang=&quot;&quot;&gt;$ cmdstalk -help
+Usage of cmdstalk:
+  -address=&quot;127.0.0.1:11300&quot;: beanstalkd TCP address.
+  -all=false: Listen to all tubes, instead of -tubes=...
+  -cmd=&quot;&quot;: Command to run in worker.
+  -per-tube=1: Number of workers per tube.
+  -tubes=[default]: Comma separated list of tubes.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Our app runs cmdstalk under &lt;a href=&quot;http://supervisord.org/&quot;&gt;supervisord&lt;/a&gt; like this:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-&quot; data-lang=&quot;&quot;&gt;cmdstalk -all -per-tube=6 -cmd=&quot;/path/to/swiftly/console worker:stdin&quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2&gt;Go&lt;/h2&gt;
+
+&lt;p&gt;Go has become the &lt;abbr title=&quot;(sorry)&quot;&gt;go-to&lt;/abbr&gt; language at 99designs for
+infrastructure components.  My only previous Go experience comes from
+writing &lt;a href=&quot;https://github.com/pda/go6502&quot;&gt;go6502, an 8-bit computer emulator&lt;/a&gt;.  Fascinating, but
+different to writing concurrent network applications. Despite that, building
+cmdstalk with Go was a pleasure.&lt;/p&gt;
+
+&lt;p&gt;Starting from the &lt;a href=&quot;https://github.com/99designs/cmdstalk/blob/master/cmdstalk.go&quot;&gt;cmdstalk entrypoint&lt;/a&gt; you&amp;#39;ll see &lt;code&gt;broker&lt;/code&gt; and
+&lt;code&gt;cli&lt;/code&gt; packages loaded.  &lt;a href=&quot;https://github.com/99designs/cmdstalk/blob/master/cli/options.go&quot;&gt;cli/options.go&lt;/a&gt; demonstrates Go&amp;#39;s &lt;a href=&quot;http://golang.org/pkg/flag/&quot;&gt;flag&lt;/a&gt; library for
+argument parsing.  &lt;a href=&quot;https://github.com/99designs/cmdstalk/blob/master/broker/broker_dispatcher.go&quot;&gt;broker_dispatcher.go&lt;/a&gt;
+coordinates broker concurrency across tubes, and &lt;a href=&quot;https://github.com/99designs/cmdstalk/blob/master/broker/broker.go&quot;&gt;broker.go&lt;/a&gt;
+is where the action happens. &lt;code&gt;Broker.Run()&lt;/code&gt; is a clear candidate for
+refactoring, but when workers are burning, software&amp;#39;s better shipped than
+perfect.&lt;/p&gt;
+
+&lt;p&gt;Commit &lt;a href=&quot;https://github.com/99designs/cmdstalk/commit/ade6f6b01b058fac1f13835c4937f0baf61e53ed&quot;&gt;&lt;code&gt;ade6f6b0&lt;/code&gt;&lt;/a&gt; introduces a simple &lt;code&gt;-all&lt;/code&gt; flag to watch all
+tubes at start-up.  &lt;a href=&quot;https://github.com/99designs/cmdstalk/commit/431ac5fc3a34b32384e05fbab03a6de82ab7f572&quot;&gt;&lt;code&gt;431ac5fc&lt;/code&gt;&lt;/a&gt; evolves it to poll for new tubes as
+they&amp;#39;re created.  The latter illustrates how well timers and concurrency come
+together in Go.  Together they show that it&amp;#39;s simple to add functionality that
+would be complex in other languages.&lt;/p&gt;
+
+&lt;p&gt;Tests live alongside the code they&amp;#39;re testing, such as
+&lt;a href=&quot;https://github.com/99designs/cmdstalk/blob/master/broker/broker_test.go&quot;&gt;broker_test.go&lt;/a&gt; alongside
+&lt;a href=&quot;https://github.com/99designs/cmdstalk/blob/master/broker/broker.go&quot;&gt;broker.go&lt;/a&gt;.  They&amp;#39;re regular Go code using &lt;code&gt;if&lt;/code&gt; to make
+assertions, but richer assertion libraries do exist.&lt;/p&gt;
+
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+
+&lt;p&gt;cmdstalk applies a unix-process abstraction layer to beanstalkd job processing.
+Like any abstraction it needs to make itself worthwhile.&lt;/p&gt;
+
+&lt;p&gt;If you&amp;#39;re running Rails, you might want to look at &lt;a href=&quot;https://github.com/mperham/sidekiq&quot;&gt;Sidekiq&lt;/a&gt; or
+&lt;a href=&quot;https://github.com/resque/resque&quot;&gt;Resque&lt;/a&gt;, or maybe even &lt;a href=&quot;https://github.com/collectiveidea/delayed_job&quot;&gt;delayed_job&lt;/a&gt;. If you&amp;#39;re 100% python, you
+could wire together some solid libraries for job processing.&lt;/p&gt;
+
+&lt;p&gt;But if you need to process background jobs using several languages, some of
+them poorly suited to long-running daemons and concurrency, cmdstalk may be for
+you. &lt;a href=&quot;https://github.com/99designs/cmdstalk&quot;&gt;Give it a try&lt;/a&gt;; feedback and pull requests are welcome.&lt;/p&gt;
+</description>
+        <pubDate>Mon, 11 Aug 2014 00:00:00 +1000</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2014/08/11/cmdstalk-golang-beanstalkd/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2014/08/11/cmdstalk-golang-beanstalkd/</guid>
+        
+        
+        <category>dev</category>
+        
+        <category>golang</category>
+        
+      </item>
+    
+      <item>
+        <title>Swiftly and Machine Learning: Part 2</title>
+        <description>&lt;p&gt;In this series of guest blog posts, 99designs intern Daniel Williams takes us through how he has applied his knowledge of Machine Learning to the challenge of classifying Swiftly tasks based on what what customer requests.&lt;/p&gt;
+
+&lt;h2&gt;The challenge&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://swiftly.com&quot;&gt;Swiftly&lt;/a&gt; is an online service from &lt;a href=&quot;https://99designs.com&quot;&gt;99designs&lt;/a&gt; that lets customers get small graphic design jobs done quickly and affordably. It’s powered by a global network of professional designers who tackle things like business card updates and photo retouching in 30 minutes or less -- an amazing turnaround time for a service with real people in the loop!&lt;/p&gt;
+
+&lt;p&gt;With time vital to the service value, any moment wasted in allocating a task to a designer with experience in the specific requirements could have a detrimental impact on the customers experience.&lt;/p&gt;
+
+&lt;p&gt;With the ultimate aim of complete and accurate automation of job to designer matching with the customer simply saying in their own terms what they need, we decided to apply &lt;a href=&quot;http://en.wikipedia.org/wiki/Machine_learning&quot;&gt;machine learning&lt;/a&gt; to further develop Swiftly&amp;#39;s &amp;quot;Intelligent Matching System&amp;quot;.&lt;/p&gt;
+
+&lt;p&gt;This is part two of a three-part blog series. In &lt;a href=&quot;https://99designs.com/tech-blog/blog/2014/01/22/Swiftly-Machine-Learning-1/&quot;&gt;part one&lt;/a&gt; we tried to determine the types of tasks. In this post, we use machine learning to classify tasks into these task categories. A future post will discuss using our predictions for task allocation.&lt;/p&gt;
+
+&lt;h2&gt;Categories to predict&lt;/h2&gt;
+
+&lt;p&gt;To set up a machine learning problem, we need to first decide on what we want the answers to be.
+After the last post&amp;#39;s experimentation, I decided to split the classification into two parts: what type of document is to be edited or created, and what type of work is needed on the document.&lt;/p&gt;
+
+&lt;p&gt;This gives us 7 document types:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;Logo&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Business Card&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Icon&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Template&lt;/code&gt; (ppt / pdf / word etc)&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Header / Banner / Ad / Poster&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Social Media&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Other Image&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;and 9 types of graphic design work appropriate for small tasks:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;Vectorisation&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Transparency&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Holidays edit&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Creative Update&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Resize&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Reformat&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;General Edit&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Colour Change&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Text Change&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For example, one task might be &lt;code&gt;Vectorisation&lt;/code&gt; on a &lt;code&gt;Logo&lt;/code&gt;, another might be &lt;code&gt;Text Change&lt;/code&gt; on a &lt;code&gt;Business Card&lt;/code&gt;. In total, 63 different combinations of document and work type exist. This is what we&amp;#39;re trying to predict.&lt;/p&gt;
+
+&lt;h2&gt;Obtaining training data&lt;/h2&gt;
+
+&lt;p&gt;In my last post, I used &lt;em&gt;unsupervised&lt;/em&gt; techniques that don&amp;#39;t need training data. Now that we have a specific outcome we&amp;#39;d like to predict, &lt;em&gt;supervised&lt;/em&gt; methods are more appropriate. They use training data find patterns associated with each category, patterns that might be hard for humans to spot. For us, that training data will be a bunch of historical tasks and the correct categories for them.&lt;/p&gt;
+
+&lt;p&gt;However, obtaining good training data is a large problem in itself, especially given how many combinations of categories there are!&lt;/p&gt;
+
+&lt;h3&gt;Mechanical Turk&lt;/h3&gt;
+
+&lt;p&gt;Knowing how much work was involved, my first instinct was to outsource it to Amazon&amp;#39;s &lt;a href=&quot;https://www.mturk.com/mturk/&quot;&gt;Mechanical Turk&lt;/a&gt; service. Mechanical Turk is named after an elaborate 18th century hoax that was exhibited across Europe, in which an automaton could play a strong game of chess against a human opponent. It was a hoax because it was not an automaton at all: there was a human chess player concealed inside the machine, secretly operating it.&lt;/p&gt;
+
+&lt;p&gt;-&amp;gt;&lt;img src=&quot;/tech-blog/assets/images/mechanical-turk.jpg&quot; alt=&quot;Mechanical Turk&quot;&gt;&amp;lt;-&lt;/p&gt;
+
+&lt;p&gt;Amazon calls its service Artificial Artificial Intelligence, and it is a form of &amp;#39;fake&amp;#39; machine learning. We use software to submit tasks for classification, but real people all over the world get paid a little money to do the categorising for us.&lt;/p&gt;
+
+&lt;h3&gt;Manual Classification&lt;/h3&gt;
+
+&lt;p&gt;Unfortunately, the results I achieved from Mechanical Turk were poor. Even humans incorrectly classified many tasks, and this data, if fed into my machine learning classifier, would lead it to poor conclusions and low accuracy. The Turkers may have lacked some specialised knowledge about graphic design, or I may not have set up the Mechanical Turk task sufficiently well. (I wish I had read &lt;a href=&quot;http://www.blindfiveyearold.com/mechanical-turk-tips&quot;&gt;this post&lt;/a&gt; before diving into Mechanical Turk!)&lt;/p&gt;
+
+&lt;p&gt;Ultimately, having an accurate training set is perhaps the most important part of developing a good classifier. I rolled up my sleeves, and manually inspected and classified approximately 1200 Swiftly design briefs myself. This was slow and monotonous, but it meant that I knew I had an excellent quality training set.&lt;/p&gt;
+
+&lt;h2&gt;Pre-processing Pipeline&lt;/h2&gt;
+
+&lt;p&gt;Our classifier doesn&amp;#39;t accept raw text, but instead we must turn design briefs into features it can make decisions on. Human language is complicated, so there are many steps to go from text to features. Any good natural language system has such a pipeline. In ours, we:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Tokenise: split the text up into individual &amp;#39;words&amp;#39;&lt;/li&gt;
+&lt;li&gt;Remove punctuation and casing&lt;/li&gt;
+&lt;li&gt;Remove stop words (common words with no predictive power such as &amp;#39;a&amp;#39;, &amp;#39;the&amp;#39;)&lt;/li&gt;
+&lt;li&gt;Perform stemming (reducing words to their &amp;#39;stem&amp;#39; e.g. &amp;quot;bounced&amp;quot;, &amp;quot;bounce&amp;quot;, bouncing&amp;quot; and &amp;quot; &amp;quot;bounces&amp;quot; all become &amp;quot;bounc&amp;quot;)&lt;/li&gt;
+&lt;li&gt;Perform lemmatisation (see below)&lt;/li&gt;
+&lt;li&gt;Convert from words (&amp;quot;unigrams&amp;quot;) to word pairs (&amp;quot;bigrams&amp;quot;)&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;The first four steps we covered in the &lt;a href=&quot;https://99designs.com/tech-blog/blog/2014/01/22/Swiftly-Machine-Learning-1/&quot;&gt;last post&lt;/a&gt;, let&amp;#39;s go over steps 5 and 6 here.&lt;/p&gt;
+
+&lt;h3&gt;Lemmatisation&lt;/h3&gt;
+
+&lt;p&gt;Lemmatisation is similar to stemming. It&amp;#39;s the process of grouping related words together by replacing several variations with a common shared symbol. For example, Swiftly task descriptions often contain URLs. Lemmatisation of URLs would mean replacing every URL with a common placeholder (for example &amp;quot;$URL&amp;quot;). So the following brief:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;On this business card, please change &amp;quot;www.coolguynumber1.com&amp;quot; to &amp;quot;www.greatestdude.org&amp;quot;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;becomes:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;On this business card, please change &amp;quot;$URL&amp;quot; to &amp;quot;$URL&amp;quot;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;We do this because the number of words that occur in the data set is large, but many only occur once or twice. Nearly every URL we see in a brief will be unique. For our machine learner, it can only say something useful about words which are shared between different tasks, so all these unique words and URLs are wasted.&lt;/p&gt;
+
+&lt;p&gt;We do this because pre-processing involves generating a list of all the words that appear in the training dataset. However, words that only appear once in the dataset are removed because they add noise. URLs are generally unique and are unlikely to occur more than once. Without lemmatisation, we lose all information gained from the presence of URLs in a brief. With lemmatisation, we instead get the symbol &amp;quot;$URL&amp;quot; many times. If a URL in a task description turns out to be a discriminating feature, this should increase classification accuracy.&lt;/p&gt;
+
+&lt;p&gt;Other lemmas that I used included: dimensions (e.g. 300px x 400px), emails, DPI measures and hexadecimal codes for colours (eg. #CC3399). With these, the following (entirely fictional) task description transforms from:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Please change the email on this business card from coolguy99@99designs.com to koolguy99@99designs.com.  Can you also include a link to my website www.coolestguyuknow.net on the bottom?  Please also change all the fonts to  #CC3399 and the circle to #4C3F99. I want a few different business card sizes, namely: 400 x 400, 30 x 45 and 5600 by 3320.  Thanks!&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;to:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Please change the email on this business card from $EMAIL to $EMAIL.  Can you also include a link to my website $URL on the bottom?  Please also change all the fonts to  $CHEX and the circle to $CHEX. I want a few different business card sizes, namely: $DIM, $DIM and $DIM.  Thanks!&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Now URLs, email addresses, dimensions and so on can all take many different forms. The easiest way to match as many as possible is to use &lt;a href=&quot;http://en.wikipedia.org/wiki/Regular_expression&quot;&gt;regular expressions&lt;/a&gt;. I used these patterns to perform my lemmatisation (for Python&amp;#39;s &lt;code&gt;re&lt;/code&gt; module), you might find them useful too.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span class=&quot;c&quot;&gt;# URL regex from: http://daringfireball.net/2010/07/improved_regex_for_matching_urls&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;DIM_RE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;compile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;r&quot;&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;b&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;d+&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s?(?:[wW]|px|Px|[Pp]ixels|[hH])?&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s*(?:x|by|X)&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s*&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;d+&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s?(?:[hH]|px|Px|[Pp]ixels|[wW])?&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;b&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DOTALL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;URL_RE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;compile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;r&quot;&quot;&quot;((?:[a-z][&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;w-]+:(?:/{1,3}|[a-z0-9&lt;/span&gt;&lt;span class=&quot;si&quot;&gt;%&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;])|www&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;d{0,3}[.]|[a-z0-9.&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;-]+[.‌​][a-z]{2,4}/)(?:[^&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s()&amp;lt;&amp;gt;]+|(([^&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s()&amp;lt;&amp;gt;]+|(([^&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s()&amp;lt;&amp;gt;]+)))*))+(?:(([^&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s()&amp;lt;&amp;gt;]+|(‌​([^&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s()&amp;lt;&amp;gt;]+)))*)|[^&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s`!()[]{};:'&quot;.,&amp;lt;&amp;gt;?«»“”‘’]))&quot;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DOTALL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;EMAIL_RE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;compile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;r&quot;[A-Za-z0-9&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;+_-]+@[A-Za-z0-9&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;._-]+&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;.[a-zA-Z]*&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DOTALL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;DPI_RE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;compile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;r&quot;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;d+&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s?(?:DPI|dpi)&quot;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;CHEX_RE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;compile&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;r&quot;&quot;&quot;#[A-Fa-f0-9]{6}&quot;&quot;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h3&gt;Bigrams&lt;/h3&gt;
+
+&lt;p&gt;Previously I had worked with each word in the text individually (&amp;quot;unigrams&amp;quot;), but this often means words have no context. So, for example, &amp;quot;business card&amp;quot; was broken into &amp;quot;business&amp;quot; and &amp;quot;card&amp;quot;, and the importance of those words appearing together was lost. Bigrams are simply pairs of words that appear next to each other. So, if we include both unigrams and bigrams, the text &amp;quot;business card&amp;quot; would provide us the features &amp;quot;business&amp;quot;, &amp;quot;card&amp;quot; and &amp;quot;business card&amp;quot;. This captures more of the context of certain phrases. In our data, the top bigrams after &lt;a href=&quot;http://en.wikipedia.org/wiki/Stemming&quot;&gt;stemming&lt;/a&gt; were:&lt;/p&gt;
+
+&lt;div align=&quot;center&quot;&gt;
+&lt;table class=&quot;table&quot;&gt;
+&lt;thead&gt;
+&lt;tr&gt;&lt;th&gt;bigram&lt;/th&gt;&lt;th&gt;frequency&lt;/th&gt;&lt;/tr&gt;
+&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;would like&lt;/td&gt;&lt;td&gt; 72&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;logo add&lt;/td&gt;&lt;td&gt; 49&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;take exist&lt;/td&gt;&lt;td&gt; 47&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;fun creativ&lt;/td&gt;&lt;td&gt; 47&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;add fun&lt;/td&gt;&lt;td&gt; 44&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;exist logo&lt;/td&gt;&lt;td&gt; 44&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;busi card&lt;/td&gt;&lt;td&gt; 33&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;transpar background&lt;/td&gt;&lt;td&gt; 28&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;$URL $URL&lt;/td&gt;&lt;td&gt; 24&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;creativ festiv&lt;/td&gt;&lt;td&gt; 22&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;festiv element&lt;/td&gt;&lt;td&gt; 22&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;bat pumpkin&lt;/td&gt;&lt;td&gt; 21&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;spooki element&lt;/td&gt;&lt;td&gt; 21&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;pumpkin skeleton&lt;/td&gt;&lt;td&gt; 21&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;busi name&lt;/td&gt;&lt;td&gt; 20&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;name logo&lt;/td&gt;&lt;td&gt; 20&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;h3&gt;The pipeline in action&lt;/h3&gt;
+
+&lt;p&gt;Let&amp;#39;s do a worked example using the sentence below:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Please change the email on this business card from coolguy99@gmail.com to koolguy99@gmail.com. Thanks!&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Our pipeline first tokenises the sentence into words. Follow each word from left to right in the table below to see how it gets transformed by the pipeline.&lt;/p&gt;
+
+&lt;div align=&quot;center&quot;&gt;
+&lt;table class=&quot;table&quot; style=&quot;font-size: 14px&quot;&gt;
+&lt;thead&gt;
+&lt;tr&gt;&lt;th&gt;STEP 1&lt;/th&gt;&lt;th&gt;STEP 2&lt;/th&gt;&lt;th&gt;STEP 3&lt;/th&gt;&lt;th&gt;STEP 4&lt;/th&gt;&lt;th&gt;STEP 5&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;th&gt; Tokenisation &lt;/th&gt;&lt;th&gt; Punctuation / Case Removal &lt;/th&gt;&lt;th&gt;Stop Words&lt;/th&gt;&lt;th&gt;Stemming&lt;/th&gt;&lt;th&gt;Lemmatisation&lt;/th&gt;&lt;/tr&gt;
+&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Please&lt;/td&gt;&lt;td&gt;please&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;change&lt;/td&gt;&lt;td&gt;change&lt;/td&gt;&lt;td&gt;change&lt;/td&gt;&lt;td&gt;chang&lt;/td&gt;&lt;td&gt;chang&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;the&lt;/td&gt;&lt;td&gt;the&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;email&lt;/td&gt;&lt;td&gt;email&lt;/td&gt;&lt;td&gt;email&lt;/td&gt;&lt;td&gt;email&lt;/td&gt;&lt;td&gt;email&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;on&lt;/td&gt;&lt;td&gt;on&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;this&lt;/td&gt;&lt;td&gt;this&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;business&lt;/td&gt;&lt;td&gt;business&lt;/td&gt;&lt;td&gt;business&lt;/td&gt;&lt;td&gt;busi&lt;/td&gt;&lt;td&gt;busi&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;card&lt;/td&gt;&lt;td&gt;card&lt;/td&gt;&lt;td&gt;card&lt;/td&gt;&lt;td&gt;card&lt;/td&gt;&lt;td&gt;card&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;from&lt;/td&gt;&lt;td&gt;from&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;coolguy99@gmail.com&lt;/td&gt;&lt;td&gt;coolguy99@gmail.com&lt;/td&gt;&lt;td&gt;coolguy99@gmail.com&lt;/td&gt;&lt;td&gt;coolguy99@gmail.com&lt;/td&gt;&lt;td&gt;$EMAIL&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;to&lt;/td&gt;&lt;td&gt;to&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;koolguy99@gmail.com&lt;/td&gt;&lt;td&gt;koolguy99@gmail.com&lt;/td&gt;&lt;td&gt;koolguy99@gmail.com&lt;/td&gt;&lt;td&gt;koolguy99@gmail.com&lt;/td&gt;&lt;td&gt;$EMAIL&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt; Thanks!&lt;/td&gt;&lt;td&gt;thanks&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;td&gt;-&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;p&gt;Finally we generate bigrams, which leaves us with the following list of features: &amp;quot;chang&amp;quot;, &amp;quot;email&amp;quot;, &amp;quot;busi&amp;quot;, &amp;quot;card&amp;quot;, &amp;quot;$EMAIL&amp;quot;, &amp;quot;chang email&amp;quot;, &amp;quot;email busi&amp;quot;, &amp;quot;busi card&amp;quot;, &amp;quot;card $EMAIL&amp;quot; and &amp;quot;$EMAIL $EMAIL&amp;quot;.&lt;/p&gt;
+
+&lt;h2&gt;Vectorisation&lt;/h2&gt;
+
+&lt;p&gt;As discussed in the last post, we need to convert text into a numerical format. I used a simple model known as the bag-of-words vector space model. This model represents each document as a vector, a count of how many time each different word occurred in it. The vector will have &lt;em&gt;n&lt;/em&gt; dimensions, where &lt;em&gt;n&lt;/em&gt; is the total number of terms in the whole collection of documents. In the training dataset, there are 9186 tokens. Each brief is sparse -- the vast majority of terms will have a count of 0.&lt;/p&gt;
+
+&lt;p&gt;Once the data set has been converted into vectors, it can be used to train a supervised learning algorithm.&lt;/p&gt;
+
+&lt;h2&gt;Supervised Learning: Training the Classifier&lt;/h2&gt;
+
+&lt;p&gt;Now that our data&amp;#39;s in the desired format, we can finally develop as system that learns to tell the difference between the various categories.  This is called building a &lt;em&gt;classifier model&lt;/em&gt;.  Once the model has been built, new briefs can be fed into it and it will predict their category (called their &lt;em&gt;label&lt;/em&gt;).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/supervised-classification.png&quot; alt=&quot;supervised classification&quot;&gt;
+image credit: &lt;a href=&quot;http://nltk.googlecode.com/svn/trunk/doc/book/ch06.html&quot;&gt;NLTK&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;What we&amp;#39;ve discussed so far is getting labels and extracting features using our pipeline. But what algorithm should we use?&lt;/p&gt;
+
+&lt;h3&gt;Multinomial Naive Bayes&lt;/h3&gt;
+
+&lt;p&gt;I have chose to use the Multinomial Naive Bayes (&amp;quot;MNB&amp;quot;) classifier for this task. The &lt;a href=&quot;http://en.wikipedia.org/wiki/Naive_Bayes_classifier&quot;&gt;Naive Bayes Wikipedia page&lt;/a&gt; does a good job of explaining the mathematics behind the classifier in detail. Suffice to say that it is simple, computationally efficient and has been shown to &lt;a href=&quot;http://www.cs.waikato.ac.nz/ml/publications/2004/kibriya_et_al_cr.pdf&quot;&gt;work surprisingly well&lt;/a&gt; in the field of document classification.&lt;/p&gt;
+
+&lt;h3&gt;A (simplified) worked Example&lt;/h3&gt;
+
+&lt;p&gt;A simplified way of thinking about how the algorithm works in the context of document classification is:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;For each token in the total training dataset, what is the probability of that token being associated with each class?&lt;/li&gt;
+&lt;li&gt;For each token in a particular brief, add up the probabilities of each class for each token&lt;/li&gt;
+&lt;li&gt;pick the class with highest probability.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;So, say we have the following probabilities (after laplacian smoothing and normalisation) for the tokens from our earlier example occurring in each category type:&lt;/p&gt;
+
+&lt;table class=&quot;table&quot; style=&quot;font-size: 14px&quot;&gt;
+&lt;thead&gt;
+&lt;tr&gt; &lt;th&gt;Token Name&lt;/th&gt; &lt;th&gt;Other Image&lt;/th&gt; &lt;th&gt;Header / Banner / Ad/ Poster /Flier&lt;/th&gt; &lt;th&gt;Logo&lt;/th&gt; &lt;th&gt;Business Card&lt;/th&gt; &lt;th&gt;Template work (ppt / pdf /word etc)&lt;/th&gt; &lt;th&gt;Icon&lt;/th&gt; &lt;th&gt;Social Media&lt;/th&gt; &lt;/tr&gt;
+&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr&gt; &lt;th&gt;card&lt;/th&gt; &lt;td&gt; 0.00019 &lt;/td&gt; &lt;td&gt; 0.00322 &lt;/td&gt; &lt;td&gt; 0.00257 &lt;/td&gt; &lt;td&gt; 0.0155 &lt;/td&gt; &lt;td&gt; 0.00021 &lt;/td&gt; &lt;td&gt; 0.00055 &lt;/td&gt; &lt;td&gt; 9e-05 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;busi&lt;/th&gt; &lt;td&gt; 0.00038 &lt;/td&gt; &lt;td&gt; 0.00154 &lt;/td&gt; &lt;td&gt; 0.00325 &lt;/td&gt; &lt;td&gt; 0.00915 &lt;/td&gt; &lt;td&gt; 0.00021 &lt;/td&gt; &lt;td&gt; 0.00048 &lt;/td&gt; &lt;td&gt; 0.00037 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;busi card&lt;/th&gt; &lt;td&gt; 6e-05 &lt;/td&gt; &lt;td&gt; 0.00055 &lt;/td&gt; &lt;td&gt; 0.00174 &lt;/td&gt; &lt;td&gt; 0.00904 &lt;/td&gt; &lt;td&gt; 0.00021 &lt;/td&gt; &lt;td&gt; 0.00048 &lt;/td&gt; &lt;td&gt; 9e-05 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;chang&lt;/th&gt; &lt;td&gt; 0.00275 &lt;/td&gt; &lt;td&gt; 0.00445 &lt;/td&gt; &lt;td&gt; 0.00416 &lt;/td&gt; &lt;td&gt; 0.00525 &lt;/td&gt; &lt;td&gt; 0.00064 &lt;/td&gt; &lt;td&gt; 0.00159 &lt;/td&gt; &lt;td&gt; 0.00028 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;file&lt;/th&gt; &lt;td&gt; 0.00596 &lt;/td&gt; &lt;td&gt; 0.00395 &lt;/td&gt; &lt;td&gt; 0.00649 &lt;/td&gt; &lt;td&gt; 0.00525 &lt;/td&gt; &lt;td&gt; 0.00245 &lt;/td&gt; &lt;td&gt; 0.00408 &lt;/td&gt; &lt;td&gt; 0.00241 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;logo&lt;/th&gt; &lt;td&gt; 0.00096 &lt;/td&gt; &lt;td&gt; 0.0054 &lt;/td&gt; &lt;td&gt; 0.0266 &lt;/td&gt; &lt;td&gt; 0.00513 &lt;/td&gt; &lt;td&gt; 0.00075 &lt;/td&gt; &lt;td&gt; 0.00512 &lt;/td&gt; &lt;td&gt; 0.00408 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;need&lt;/th&gt; &lt;td&gt; 0.00832 &lt;/td&gt; &lt;td&gt; 0.00672 &lt;/td&gt; &lt;td&gt; 0.00717 &lt;/td&gt; &lt;td&gt; 0.00478 &lt;/td&gt; &lt;td&gt; 0.00139 &lt;/td&gt; &lt;td&gt; 0.00623 &lt;/td&gt; &lt;td&gt; 0.00232 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;attach&lt;/th&gt; &lt;td&gt; 0.00467 &lt;/td&gt; &lt;td&gt; 0.00622 &lt;/td&gt; &lt;td&gt; 0.00364 &lt;/td&gt; &lt;td&gt; 0.00414 &lt;/td&gt; &lt;td&gt; 0.0017 &lt;/td&gt; &lt;td&gt; 0.00484 &lt;/td&gt; &lt;td&gt; 0.0012 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;updat&lt;/th&gt; &lt;td&gt; 0.00013 &lt;/td&gt; &lt;td&gt; 0.00104 &lt;/td&gt; &lt;td&gt; 0.00079 &lt;/td&gt; &lt;td&gt; 0.00391 &lt;/td&gt; &lt;td&gt; 0.00032 &lt;/td&gt; &lt;td&gt; 0.00042 &lt;/td&gt; &lt;td&gt; 9e-05 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;$EMAIL&lt;/th&gt; &lt;td&gt; 0.00019 &lt;/td&gt; &lt;td&gt; 0.00073 &lt;/td&gt; &lt;td&gt; 0.0002 &lt;/td&gt; &lt;td&gt; 0.00373 &lt;/td&gt; &lt;td&gt; 0.00032 &lt;/td&gt; &lt;td&gt; 0.00014 &lt;/td&gt; &lt;td&gt; 0.00028 &lt;/td&gt; &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Given the the brief:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;update the logo on my business card&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;We would match up each token with it&amp;#39;s probabilities in the table above, giving us the following table. Adding up each column would then give us a score for that class.&lt;/p&gt;
+
+&lt;table class=&quot;table&quot; style=&quot;font-size: 14px&quot;&gt;
+&lt;thead&gt;
+&lt;tr&gt; &lt;th&gt;Token name&lt;/th&gt; &lt;th&gt;Other Image&lt;/th&gt; &lt;th&gt;Header / Banner / Ad / Poster / Flier&lt;/th&gt; &lt;th&gt;Logo&lt;/th&gt; &lt;th&gt;Business Card&lt;/th&gt; &lt;th&gt;Template work (ppt / pdf /word etc)&lt;/th&gt; &lt;th&gt;Icon&lt;/th&gt; &lt;th&gt;Social Media&lt;/th&gt; &lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt; &lt;th&gt;card&lt;/th&gt; &lt;td&gt; 0.00019 &lt;/td&gt; &lt;td&gt; 0.00322 &lt;/td&gt; &lt;td&gt; 0.00257 &lt;/td&gt; &lt;td&gt; 0.0155 &lt;/td&gt; &lt;td&gt; 0.00021 &lt;/td&gt; &lt;td&gt; 0.00055 &lt;/td&gt; &lt;td&gt; 9e-05 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;busi&lt;/th&gt; &lt;td&gt; 0.00038 &lt;/td&gt; &lt;td&gt; 0.00154 &lt;/td&gt; &lt;td&gt; 0.00325 &lt;/td&gt; &lt;td&gt; 0.00915 &lt;/td&gt; &lt;td&gt; 0.00021 &lt;/td&gt; &lt;td&gt; 0.00048 &lt;/td&gt; &lt;td&gt; 0.00037 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;busi card&lt;/th&gt; &lt;td&gt; 6e-05 &lt;/td&gt; &lt;td&gt; 0.00055 &lt;/td&gt; &lt;td&gt; 0.00174 &lt;/td&gt; &lt;td&gt; 0.00904 &lt;/td&gt; &lt;td&gt; 0.00021 &lt;/td&gt; &lt;td&gt; 0.00048 &lt;/td&gt; &lt;td&gt; 9e-05 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;logo&lt;/th&gt; &lt;td&gt; 0.00096 &lt;/td&gt; &lt;td&gt; 0.0054 &lt;/td&gt; &lt;td&gt; 0.0266 &lt;/td&gt; &lt;td&gt; 0.00513 &lt;/td&gt; &lt;td&gt; 0.00075 &lt;/td&gt; &lt;td&gt; 0.00512 &lt;/td&gt; &lt;td&gt; 0.00408 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;updat&lt;/th&gt; &lt;td&gt; 0.00013 &lt;/td&gt; &lt;td&gt; 0.00104 &lt;/td&gt; &lt;td&gt; 0.00079 &lt;/td&gt; &lt;td&gt; 0.00391 &lt;/td&gt; &lt;td&gt; 0.00032 &lt;/td&gt; &lt;td&gt; 0.00042 &lt;/td&gt; &lt;td&gt; 9e-05 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;th&gt;sum:&lt;/th&gt; &lt;th&gt; 0.00172 &lt;/th&gt; &lt;th&gt; 0.0118 &lt;/th&gt; &lt;th&gt; 0.035 &lt;/th&gt; &lt;th&gt; 0.0427 &lt;/th&gt; &lt;th&gt; 0.0017 &lt;/th&gt; &lt;th&gt; 0.00705 &lt;/th&gt; &lt;th&gt; 0.00472 &lt;/th&gt; &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;Business card has the highest score, and so that is our prediction. Simple! The mathematics is a little more sophisticated than this, but the intuition behind it is the same.&lt;/p&gt;
+
+&lt;h2&gt;Classifier Structure&lt;/h2&gt;
+
+&lt;p&gt;Now, we have two types of classes to predict, &lt;em&gt;document type&lt;/em&gt; and &lt;em&gt;task type&lt;/em&gt;. I decided to build the machine learning classifier structure reflect this. A top level classifier which predicts the document type (&lt;code&gt;logo&lt;/code&gt;, &lt;code&gt;business card&lt;/code&gt;, etc), trained using the full dataset. Then we have a separate specialised classifier for each document type which will predict the task category. So, we will have a classifier just for working out the task type for &lt;code&gt;business card&lt;/code&gt; cases, trained only on those cases.&lt;/p&gt;
+
+&lt;p&gt;The training and classification is summarised in these handy diagrams.&lt;/p&gt;
+
+&lt;h3&gt;Classifier Training&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/machine_learner_training.png&quot; alt=&quot;Classifier Structure&quot;&gt;&lt;/p&gt;
+
+&lt;h3&gt;Classification&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/ClassifierStructure.png&quot; alt=&quot;Classifier Structure&quot;&gt;&lt;/p&gt;
+
+&lt;h2&gt;Results&lt;/h2&gt;
+
+&lt;h3&gt;Are we getting good predictions?&lt;/h3&gt;
+
+&lt;p&gt;To see whether our algorithm is, in fact, learning with experience, we can plot a &lt;a href=&quot;http://en.wikipedia.org/wiki/Learning_curve#In_machine_learning&quot;&gt;learning curve&lt;/a&gt;. This tells us both how the classifier is doing, and how helpful more data would be. To test this, I plotted the 10-fold &lt;a href=&quot;http://scikit-learn.org/stable/modules/cross_validation.html&quot;&gt;cross-validated&lt;/a&gt; accuracy of the top-layer classifier as the training set size is increased:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/LearningCurve1.png&quot; alt=&quot;Learning Curve 1&quot;&gt;&lt;/p&gt;
+
+&lt;p&gt;It looks like our machine is learning! The more data it sees, the better it gets at picking out the correct category. It looks as though accuracy may flatten off at about 80%. This suggests that to do better, we&amp;#39;d need to find new features instead of just collecting more cases. The sub-classifiers, as a result of the classifier structure, have less data to work with in the training set. However, they appeared to follow a similar learning curve.&lt;/p&gt;
+
+&lt;h3&gt;Accuracy of various implementations&lt;/h3&gt;
+
+&lt;p&gt;Over the course of my experiments, I tested the accuracy of a variety of implementation and algorithms. For those interested in the details, accuracy figures are below.&lt;/p&gt;
+
+&lt;div align=&quot;center&quot;&gt;
+&lt;table class=&quot;table&quot;&gt;
+&lt;thead&gt;
+&lt;tr bgcolor=&quot;#C0C0C0&quot;&gt;&lt;th&gt; Classifier Type / Algorithm Type &lt;/th&gt;&lt;th&gt; MNB &lt;/th&gt;&lt;th&gt;NB&lt;/th&gt;&lt;th&gt;Baseline&lt;/th&gt;&lt;/tr&gt;
+&lt;/thead&gt;&lt;tbody&gt;
+&lt;tr bgcolor=&quot;#E6E6E6&quot;&gt;&lt;td&gt;Specialised Sub-Classifier: &lt;/td&gt;&lt;td&gt; &lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&amp;emsp; &amp;emsp; Top Level Classifier &lt;/td&gt;&lt;td&gt; 78.62 %&lt;/td&gt;&lt;td&gt;60.17 %&lt;/td&gt;&lt;td&gt;36.33 %&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt; &amp;emsp; &amp;emsp; Sub-Classifier&lt;/td&gt;&lt;td&gt; 69.46 %&lt;/td&gt;&lt;td&gt; 61.54 %&lt;/td&gt;&lt;td&gt;32.97 %&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt; &amp;emsp; &amp;emsp; Combined accuracy&lt;/td&gt;&lt;td&gt; 54.61 %&lt;/td&gt;&lt;td&gt;37.03 %&lt;/td&gt;&lt;td&gt;11.97 %&lt;/td&gt;&lt;/tr&gt;
+&lt;tr bgcolor=&quot;#E6E6E6&quot;&gt;&lt;td&gt;Generalised Sub-Classifier: &lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&amp;emsp; &amp;emsp; Top Level Classifier &lt;/td&gt;&lt;td&gt; 78.62 %&lt;/td&gt;&lt;td&gt;60.17 %&lt;/td&gt;&lt;td&gt;36.33 %&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt; &amp;emsp; &amp;emsp; Sub-Classifier&lt;/td&gt;&lt;td&gt;59.97 %&lt;/td&gt;&lt;td&gt;50.95 %&lt;/td&gt;&lt;td&gt; 24.13 %&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt; &amp;emsp; &amp;emsp; Combined accuracy&lt;/td&gt;&lt;td&gt;47.15 %&lt;/td&gt;&lt;td&gt;30.66 %&lt;/td&gt;&lt;td&gt;8.77 %&lt;/td&gt;&lt;/tr&gt;
+&lt;tr bgcolor=&quot;#E6E6E6&quot;&gt;&lt;td&gt;Single Classifier: &lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr &gt;&lt;td&gt; &amp;emsp; &amp;emsp; Accuracy &lt;/td&gt;&lt;td&gt; 45.58 % &lt;/td&gt;&lt;td&gt; 39.12 %&lt;/td&gt;&lt;td&gt;11.43 %&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;p&gt;The &amp;quot;Specialised Sub-Classifier&amp;quot; is the implementation we discussed above, whereas the &amp;quot;Generalised Sub-Classifier&amp;quot; used a single classifier to look at task type, rather than one per document type. The &amp;quot;Single Classifier&amp;quot; tries to hit both targets at once, classifying against the full set of 63 category combinations. I also compared multinomial naive bayes against naive bayes (NB) and a simple Zero-R baseline.&lt;/p&gt;
+
+&lt;h2&gt;Wrapping up&lt;/h2&gt;
+
+&lt;p&gt;The two-tier classifier approach worked the best, picking the document type correctly nearly 80% of the time, but getting both document and task type right only 55% of the time. The Multinomial Naive Bayes also did better than Naive Bayes on this task, as expected.&lt;/p&gt;
+
+&lt;p&gt;How might we improve our results? We could investigate:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Other classification algorithms (research suggests &lt;a href=&quot;http://en.wikipedia.org/wiki/Support_vector_machine&quot;&gt;Support Vector Machines&lt;/a&gt; are perhaps the most accurate methods)&lt;/li&gt;
+&lt;li&gt;The &lt;a href=&quot;http://en.wikipedia.org/wiki/Tf%E2%80%93idf&quot;&gt;TF-IDF vector model&lt;/a&gt; (as opposed to the &lt;a href=&quot;http://en.wikipedia.org/wiki/Bag-of-words_model&quot;&gt;bag of words vector model&lt;/a&gt; which I currently use)&lt;/li&gt;
+&lt;li&gt;Additional metadata for a task beyond just its text&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h1&gt;Next Time&lt;/h1&gt;
+
+&lt;p&gt;Next time, I will be discussing the how this system can be applied to assist with the next stage of the customer to designer matching process. How do we figure out which categories a particular designer may be good at? And how do we make sure that designer gets those tasks?&lt;/p&gt;
+
+&lt;div class=&quot;aboutbox&quot;&gt;
+&lt;h2&gt;About Daniel&lt;/h2&gt;
+&lt;p&gt;Daniel Williams is a Bachelor of Science (Computing and Software Science) student at the University of Melbourne and Research Assistant at the Centre for Neural Engineering where he applies Machine Learning techniques to the search for genetic indicators of Schizophrenia. He also serves as a tutor at the Department of Computing and Information Systems. Daniel was one of four students selected to take part in the inaugural round of Tin Alley Beta summer internships and he now works part-time at 99designs. Daniel is an avid eurogamer, follower of &quot;the cricket&quot;, and hearty enjoyer of the pub.&lt;/p&gt;
+&lt;/div&gt;
+</description>
+        <pubDate>Tue, 22 Apr 2014 00:00:00 +1000</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2014/04/22/Swiftly-Machine-Learning-2/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2014/04/22/Swiftly-Machine-Learning-2/</guid>
+        
+        
+        <category>dev</category>
+        
+        <category>python</category>
+        
+        <category>swiftly</category>
+        
+        <category>machinelearning</category>
+        
+      </item>
+    
+      <item>
+        <title>We're Hiring a Ruby on Rails Developer</title>
+        <description>&lt;p&gt;Here at 99designs we&amp;#39;re what you&amp;#39;d call a polygot shop – we&amp;#39;ve got a mix of PHP, Ruby, Python, and Go in production. When we say production, we mean at serious scale. Our mission is to connect the world with great graphics designers wherever they are, something which we do quite a bit of.&lt;/p&gt;
+
+&lt;p&gt;Right now we&amp;#39;re on a hunt for a developer who can Help Us Out™. Usually we advertise for a generalist &amp;quot;web developer&amp;quot; and then  find the right place for them internally based on their strengths. This time we&amp;#39;re trying to hire a very specific skill set for a very specific project. The skills are Ruby and Rails, and the project is building out our new payments service.&lt;/p&gt;
+
+&lt;p&gt;Company wide we&amp;#39;re transitioning to having small, decentralised teams with their own product lines and the attendant SOA/Platform to support that goal. Last year we had great success with creating our single sign-on system in Go, and this year we&amp;#39;re rounding out the platform with a shared payments system in Rails*.&lt;/p&gt;
+
+&lt;p&gt;This new service will enable us to spin up new product lines or move into new international markets quickly. Between the iterative approach we&amp;#39;re taking to replace our old payments system and the UX for both the customers using the service and the developers integrating it there are some exciting and interesting problems to solve on this project.&lt;/p&gt;
+
+&lt;p&gt;The existing team on project are very strong developers with good knowledge of the problem space but not a lot of Rails experience. We need a mid to senior developer to come in and help &amp;quot;set the tone&amp;quot; of the codebase. That role had been filled within the team by me (John Barton, internet famous as &amp;quot;angry webscale ruby guy&amp;quot;), but I&amp;#39;ve since been promoted to manage the engineering team as a whole and between all the meetings and spreadsheets it&amp;#39;s hard to keep up the pace of contribution that this project deserves.&lt;/p&gt;
+
+&lt;p&gt;You&amp;#39;ll need to be the diesel engine of the team: churn through the backlog turning features into idiomatic and reliable Rails code at a steady cadence. There are opportunities to coach within the team, but even just creating a sizeable body of code to be an example of &amp;quot;this is how we do it&amp;quot; (cue &lt;a href=&quot;https://www.youtube.com/watch?v=0hiUuL5uTKc&quot;&gt;Montell Jordan&lt;/a&gt;) will keep this project on track.&lt;/p&gt;
+
+&lt;p&gt;The quality of the codebase after 3 months of progress is high. We don&amp;#39;t believe in magic make-believe numbers here, but right now we&amp;#39;re sitting on a code climate GPA of 4.0. If you&amp;#39;re a fan of Sandi Metz&amp;#39;s Practical Object Oriented Design in Ruby or Avdi Grimm&amp;#39;s Objects on Rails you will feel right at home in this codebase.&lt;/p&gt;
+
+&lt;p&gt;If this is something you&amp;#39;re interested in and think you can help us out with, check out the &lt;a href=&quot;https://99designs.wufoo.com/forms/ruby-on-rails-developer/&quot;&gt;job ad&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;*You may be wondering &amp;quot;why not go?&amp;quot; for this system. The short answer is that there&amp;#39;s enough complexity in the business rules that the expressiveness of Ruby is very useful, and being a financial project moving numbers around in a database is very important and ActiveRecord is more mature that any of the ORMs available in Go right now. I&amp;#39;m happy to elaborate on our line of thinking during your interview ;-)&lt;/p&gt;
+</description>
+        <pubDate>Mon, 31 Mar 2014 11:57:00 +1100</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2014/03/31/hiring-a-rails-developer/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2014/03/31/hiring-a-rails-developer/</guid>
+        
+        
+        <category>hiring</category>
+        
+        <category>rails</category>
+        
+        <category>ruby</category>
+        
+      </item>
+    
+      <item>
+        <title>Debugging Varnish</title>
+        <description>&lt;p&gt;At 99designs we heavily (ab)use Varnish to make our app super fast, but also to
+do common, simple tasks without having to invoke our heavy-by-contrast PHP
+stack. As a result, our Varnish config is pretty involved, containing more than
+1000 lines of &lt;a href=&quot;https://www.varnish-cache.org/docs/3.0/tutorial/vcl.html&quot;&gt;VCL&lt;/a&gt;, and a non-trivial amount of embedded C.&lt;/p&gt;
+
+&lt;p&gt;When we started seeing regular segfaults, it was a pretty safe assumption that one of
+us had goofed writing C code. So how do you track down a transient segfault in a system like Varnish? Join us down the rabbit hole...&lt;/p&gt;
+
+&lt;h2&gt;Get a core dump&lt;/h2&gt;
+
+&lt;p&gt;The first step is to modify your production environment to provide you with
+useful core dumps. There are a few steps in this:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;First of all, configure the kernel to provide core dumps by setting a few sysctls:&lt;/li&gt;
+&lt;/ol&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;&lt;span class=&quot;nb&quot;&gt;echo &lt;/span&gt;1 &amp;gt; /proc/sys/kernel/core_uses_pid
+&lt;span class=&quot;nb&quot;&gt;echo &lt;/span&gt;2 &amp;gt; /proc/sys/fs/suid_dumpable
+mkdir /mnt/cores
+chmod 777 /mnt/cores
+&lt;span class=&quot;nb&quot;&gt;echo&lt;/span&gt;  /mnt/cores/core &amp;gt; /proc/sys/kernel/core_pattern
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;In order, this:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Tells the kernel to append pid&amp;#39;s to core files to make it easy to marry up the cores with the logs&lt;/li&gt;
+&lt;li&gt;Tells the kernel that &lt;a href=&quot;http://en.wikipedia.org/wiki/Setuid&quot;&gt;suid binaries&lt;/a&gt; are allowed to dump core&lt;/li&gt;
+&lt;li&gt;Creates a place to store cores on AWS&amp;#39;s ephemeral storage (if like us you&amp;#39;re on EC2)&lt;/li&gt;
+&lt;li&gt;Tells the kernel to write core files out there&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;With this done, and no known way to trigger the bug, play the waiting game.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;When varnish explodes, it&amp;#39;s show time. Copy the core file, along with the shared
+object that varnish emits from compiling the VCL (Located in
+&lt;code&gt;/var/lib/varnish/$HOSTNAME&lt;/code&gt;) over to a development instance and let the debugging begin.&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2&gt;Locate the crash point&lt;/h2&gt;
+
+&lt;p&gt;If you have access to the excellent &lt;a href=&quot;http://lldb.llvm.org/&quot;&gt;LLDB&lt;/a&gt; from the LLVM project, use that. In our case, getting it to
+work on Ubuntu 12.04 involves upgrading half the system, resulting in an
+environment too dissimilar to production.&lt;/p&gt;
+
+&lt;p&gt;If you spend a lot of time in a debugger, you&amp;#39;ll probably want to use a helper
+like &lt;a href=&quot;https://github.com/gdbinit/Gdbinit&quot;&gt;fG!&amp;#39;s gdbinit&lt;/a&gt; or &lt;a href=&quot;https://github.com/snarez/voltron&quot;&gt;voltron&lt;/a&gt; to make your life
+easier. I use voltron, but because of some of the clumsiness in gdb&amp;#39;s API,
+immediately ran into &lt;a href=&quot;https://github.com/snarez/voltron/pull/44&quot;&gt;some&lt;/a&gt; &lt;a href=&quot;https://github.com/snarez/voltron/pull/45&quot;&gt;bugs&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Finally, debugging environment working, it&amp;#39;s time to dig into the crash. Your situation is going to be different to ours, but here&amp;#39;s how we went about debugging a problem like this recently:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/xXVNTMmH37vjw.png&quot; alt=&quot;&quot;&gt;
+&lt;div align=&quot;center&quot;&gt;&lt;p&gt;&lt;em&gt;Debugging the core dump with voltron&lt;/em&gt;&lt;/p&gt;&lt;/div&gt;&lt;/p&gt;
+
+&lt;p&gt;As you can see in the &lt;code&gt;[code]&lt;/code&gt; pane, the faulting instruction is &lt;code&gt;mov
+0x0(%rbp),%r14&lt;/code&gt;, trying to load the value pointed to by &lt;code&gt;RBP&lt;/code&gt; into &lt;code&gt;r14&lt;/code&gt;.
+Looking in the register view we see that &lt;code&gt;RBP&lt;/code&gt; is NULL.&lt;/p&gt;
+
+&lt;p&gt;Inspecting the source, we see that the faulting routine is inlined, and that
+the compiler has hijacked RBP (The base pointer for the current stack frame) to
+use as argument storage for the inline routine&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/DFWFa31k0BxTR.png&quot; alt=&quot;&quot;&gt;
+&lt;div align=&quot;center&quot;&gt;&lt;p&gt;&lt;em&gt;The offending assembly code&lt;/em&gt;&lt;/p&gt;&lt;/div&gt;&lt;/p&gt;
+
+&lt;p&gt;Of specific interest is this portion:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-&quot; data-lang=&quot;&quot;&gt;   0x000000000045a7c9 &amp;lt;+265&amp;gt;:   mov    0x223300(%rip),%rbp        # 0x67dad0 &amp;lt;pagesize_mask&amp;gt;
+   0x000000000045a7d0 &amp;lt;+272&amp;gt;:   not    %rbp
+   0x000000000045a7d3 &amp;lt;+275&amp;gt;:   and    0x10(%r14),%rbp
+   0x000000000045a7d7 &amp;lt;+279&amp;gt;:   cmpb   $0x0,0x223303(%rip)        # 0x67dae1 &amp;lt;opt_junk&amp;gt;
+=&amp;gt; 0x000000000045a7de &amp;lt;+286&amp;gt;:   mov    0x0(%rbp),%r14
+   0x000000000045a7e2 &amp;lt;+290&amp;gt;:   mov    0x28(%r14),%r15
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Which in plain english:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Loads a &lt;code&gt;rip&lt;/code&gt; relative address into &lt;code&gt;rbp&lt;/code&gt; (&lt;code&gt;pagesize_mask&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;Inverts &lt;code&gt;rbp&lt;/code&gt; bitwise&lt;/li&gt;
+&lt;li&gt;Performs a bitwise and against 16 bytes into the structure pointed to by &lt;code&gt;r14&lt;/code&gt;, (&lt;code&gt;mapelm-&amp;gt;bits&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;Pointlessly checks if &lt;code&gt;pagesize_mask&lt;/code&gt; is NULL&lt;/li&gt;
+&lt;li&gt;Tries to load the address pointed to by &lt;code&gt;rbp&lt;/code&gt; into &lt;code&gt;r14&lt;/code&gt;, which faults.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Which is emitted by:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-c&quot; data-lang=&quot;c&quot;&gt;&lt;span class=&quot;k&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;kr&quot;&gt;inline&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;
+&lt;span class=&quot;nf&quot;&gt;arena_dalloc_small&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;arena_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;arena&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;arena_chunk_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chunk&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ptr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;arena_chunk_map_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mapelm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;arena_run_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;arena_bin_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bin&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;size_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+    &lt;span class=&quot;n&quot;&gt;run&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;arena_run_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mapelm&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;~&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pagesize_mask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;assert&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;magic&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ARENA_RUN_MAGIC&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;bin&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bin&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// XXX KABOOM
+&lt;/span&gt;    &lt;span class=&quot;n&quot;&gt;size&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bin&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reg_size&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We now know that the fault is caused by a &lt;code&gt;mapelm&lt;/code&gt; struct with a &lt;code&gt;bits&lt;/code&gt; member
+set to zero; but why are we getting passed this broken struct with garbage in
+it?&lt;/p&gt;
+
+&lt;h2&gt;Digging in deeper&lt;/h2&gt;
+
+&lt;p&gt;Since this function is declared inline, it&amp;#39;s actually folded into the calling
+frame. The only reason it actually appears as in the backtrace is because the
+callsite is present in the DWARF debugging data.&lt;/p&gt;
+
+&lt;p&gt;We can poke at the value by inferring its location from the upstream assembly,
+but it&amp;#39;s easier to jump into the next upstream frame and inspect that:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-&quot; data-lang=&quot;&quot;&gt;(gdb) frame 1
+#1  arena_dalloc (arena=0x7f28c4000020, ptr=0x7f28c40008c0, chunk=0x7f28c4000000) at jemalloc_linux.c:3939
+3939    in jemalloc_linux.c
+(gdb) info locals
+pageind = &amp;lt;optimized out&amp;gt;
+mapelm = 0x7f28c4000020
+(gdb) p *mapelm
+$3 = {link = {rbn_left = 0x300000001, rbn_right_red = 0x100002fda}, bits = 0}
+(gdb)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;So this looks like an element in a &lt;a href=&quot;http://en.wikipedia.org/wiki/Red_black_tree&quot;&gt;red black tree&lt;/a&gt;, with two neighours and a
+null for the &lt;code&gt;bits&lt;/code&gt; member. Let&amp;#39;s double check:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-&quot; data-lang=&quot;&quot;&gt;(gdb) ptype *mapelm
+type = struct arena_chunk_map_s {
+    struct {
+        arena_chunk_map_t *rbn_left;
+        arena_chunk_map_t *rbn_right_red;
+    } link;
+    size_t bits;
+}
+(gdb) ptype arena_run_t
+type = struct arena_run_s {
+    arena_bin_t *bin;
+    unsigned int regs_minelm;
+    unsigned int nfree;
+    unsigned int regs_mask[1];
+}
+(gdb)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Wait, wat?&lt;/p&gt;
+
+&lt;p&gt;Looking back to get our bearings:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-c&quot; data-lang=&quot;c&quot;&gt;&lt;span class=&quot;n&quot;&gt;run&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;arena_run_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mapelm&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bits&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;~&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pagesize_mask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The code is trying to generate a pointer to this arena run structure, using the
+number of bits in the mapelm struct, AND against the inverse &lt;code&gt;pagesize_mask&lt;/code&gt; to
+locate the start of a page. Because bits is zero, this is the start of the
+&lt;a href=&quot;http://en.wikipedia.org/wiki/Zero_page&quot;&gt;zero page&lt;/a&gt;; a NULL pointer.&lt;/p&gt;
+
+&lt;p&gt;This is enough to see &lt;em&gt;how&lt;/em&gt; it&amp;#39;s crashing, but doesn&amp;#39;t give us much insight for why. Let&amp;#39;s go digging.&lt;/p&gt;
+
+&lt;p&gt;Looking back at the code snippit, we see an assertion that the &lt;code&gt;arena_run_t&lt;/code&gt;
+structure&amp;#39;s &lt;code&gt;magic&lt;/code&gt; member is correct, so with that known we can go looking for
+other structures in memory. A quick grep turns up:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-&quot; data-lang=&quot;&quot;&gt;./lib/libjemalloc/malloc.c:#  define ARENA_RUN_MAGIC 0x384adf93
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;code&gt;pagesize_mask&lt;/code&gt; is just the page size -1, meaning that any address bitwise AND
+against the inverse of the &lt;code&gt;pagesize_mask&lt;/code&gt; will give you the address at the
+beginning of that page.&lt;/p&gt;
+
+&lt;p&gt;We can therefore just search every writable page in memory for the magic number
+at the correct offset.&lt;/p&gt;
+
+&lt;p&gt;.. Or can we?&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-c&quot; data-lang=&quot;c&quot;&gt;&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;arena_run_s&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;arena_run_t&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;arena_run_s&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cp&quot;&gt;#ifdef MALLOC_DEBUG
+&lt;/span&gt;    &lt;span class=&quot;kt&quot;&gt;uint32_t&lt;/span&gt;    &lt;span class=&quot;n&quot;&gt;magic&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cp&quot;&gt;#  define ARENA_RUN_MAGIC 0x384adf93
+#endif
+&lt;/span&gt;
+    &lt;span class=&quot;cm&quot;&gt;/* Bin this run is associated with. */&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;arena_bin_t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bin&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The magic number and magic member of the struct (Conveniently located as the
+first 4 bytes of each page) only exists if we&amp;#39;ve got a debug build.&lt;/p&gt;
+
+&lt;h2&gt;Aside: can we abuse &lt;code&gt;LD_PRELOAD&lt;/code&gt; for profit?&lt;/h2&gt;
+
+&lt;p&gt;At this point all signs point to either a double free in varnish&amp;#39;s thread pool implementation, leading to an empty bucket (&lt;code&gt;bits&lt;/code&gt; == 0), or a bug in its memory allocation library jemalloc.&lt;/p&gt;
+
+&lt;p&gt;In theory, it should be pretty easy to rule out jemalloc, by swapping in another malloc library implementation. We could do that by putting, say tcmalloc, in front of its symbol resolution path using &lt;code&gt;LD_PRELOAD&lt;/code&gt;:&lt;/p&gt;
+
+&lt;p&gt;We&amp;#39;ll add:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;LD_PRELOAD&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/usr/lib/libtcmalloc_minimal.so.0
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;to &lt;code&gt;/etc/varnish/default&lt;/code&gt; and bounce varnish. Then move all the old core files out of the way, wait (and benchmark!)&lt;/p&gt;
+
+&lt;p&gt;However, there&amp;#39;s a flaw in our plan. Older versions of varnish
+(remember that we&amp;#39;re on an LTS distribution of Ubuntu) vendor in a copy of
+jemalloc and statically link it, meaning that the symbols &lt;code&gt;free&lt;/code&gt; and &lt;code&gt;malloc&lt;/code&gt;
+are resolved at compile time, not runtime. This means no easy preload hacks for us.&lt;/p&gt;
+
+&lt;h2&gt;Rebuilding Varnish&lt;/h2&gt;
+
+&lt;p&gt;The easy solution won&amp;#39;t work, so let&amp;#39;s do the awkward one: rebuild varnish!&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;apt-get &lt;span class=&quot;nb&quot;&gt;source &lt;/span&gt;varnish
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Grab a copy of the varnish source, and link it against tcmalloc. Before that
+though, I deleted &lt;code&gt;lib/libjemalloc&lt;/code&gt; and used grep to remove every reference to
+jemalloc from the codebase (Which was basically just some changes to the
+configure script and makefiles)&lt;/p&gt;
+
+&lt;p&gt;and then add &lt;code&gt;-ltcmalloc_minimal&lt;/code&gt; to &lt;code&gt;CFLAGS&lt;/code&gt; before building. As an aside, the
+ubuntu packages for tcmalloc ship &lt;code&gt;/usr/lib/libtcmalloc_minimal.so.0&lt;/code&gt; but not
+&lt;code&gt;/usr/lib/libtcmalloc_minimal.so&lt;/code&gt;, which means the linker can&amp;#39;t find them. I
+had to manually create a symlink.&lt;/p&gt;
+
+&lt;p&gt;With this new varnish in production, we haven&amp;#39;t yet seen the same crash, so it
+appears that it was a bug in jemalloc, probably a nasty interaction between
+libpthread and libjemalloc (The crash was consistently inside thread
+initialization).&lt;/p&gt;
+
+&lt;h2&gt;Try it yourself?&lt;/h2&gt;
+
+&lt;p&gt;Let&amp;#39;s hope not. But if you do a lot of Varnish hacking with custom extensions, occasional C bugs are to be expected. This post walked you through a tricky Varnish bug, giving you an idea of the tools and tricks around debugging similar hairy segfaults.&lt;/p&gt;
+
+&lt;p&gt;If you&amp;#39;re messing around with voltron, you might find &lt;a href=&quot;https://github.com/richo/dotfiles/blob/master/voltron/config&quot;&gt;my voltron config&lt;/a&gt; and the &lt;a href=&quot;https://github.com/richo/dotfiles/blob/master/voltron.tmux&quot;&gt;tmux script&lt;/a&gt; I use to setup my environment a useful starting point.&lt;/p&gt;
+</description>
+        <pubDate>Thu, 30 Jan 2014 11:57:00 +1100</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2014/01/30/debugging-varnish/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2014/01/30/debugging-varnish/</guid>
+        
+        
+        <category>varnish</category>
+        
+        <category>debugging</category>
+        
+      </item>
+    
+      <item>
+        <title>Swiftly and Machine Learning: Part 1</title>
+        <description>&lt;p&gt;In this series of guest blog posts, &lt;a href=&quot;https://99designs.com&quot;&gt;99designs&lt;/a&gt; intern Daniel Williams takes us through how he has applied his knowledge of Machine Learning to the problem of classifying &lt;a href=&quot;https://swiftly.com&quot;&gt;Swiftly&lt;/a&gt; tasks.&lt;/p&gt;
+
+&lt;h1&gt;Introduction&lt;/h1&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://swiftly.com&quot;&gt;Swiftly&lt;/a&gt; is an online service from &lt;a href=&quot;https://99designs.com&quot;&gt;99designs&lt;/a&gt; that lets customers get small graphic design jobs done quickly and affordably. It’s powered by a global network of professional designers who tackle things like business card updates and photo retouching in 30 minutes or less -- an amazing turnaround time for a service with real people in the loop!&lt;/p&gt;
+
+&lt;p&gt;Given that we have a pool of designers waiting for customer work, how can we best allocate them tasks? Currently we take a naive but fair approach: assign each new task to the designer that has been waiting in the queue the longest. But there’s room for improvement: designers excel at different types of tasks, so ideally we&amp;#39;d match tasks to designers based on expertise. To do this we need to be able to categorise tasks by the skills they require.&lt;/p&gt;
+
+&lt;p&gt;In today&amp;#39;s approach, we&amp;#39;ll try to solve the problem with machine learning. The first step is to find a way to automatically categorise a design brief, with categories forming our &amp;quot;areas of expertise&amp;quot;. The next will be figuring out what categories a particular designer is good at. If we can build solid methods for both these two steps, we can begin matching designers to tasks.&lt;/p&gt;
+
+&lt;p&gt;In this post, I&amp;#39;ll introduce the problem and walk through some attempts at applying unsupervised techniques for discovering task categories. Follow along, and you may recognise a similar situation of your own that you can apply these methods to.&lt;/p&gt;
+
+&lt;h1&gt;Swiftly tasks&lt;/h1&gt;
+
+&lt;p&gt;Swiftly tasks are meant to be quick to fire off and highly flexible. The customer fills in a short text box saying what they want done, uploads an image or two, and then waits for the result. This type of description, plain text and raw images, is highly unstructured. Since image recognition and indexing is its own hard problem, we&amp;#39;ll skip the images for now and focus on the text.&lt;/p&gt;
+
+&lt;p&gt;Here&amp;#39;s a couple of examples:&lt;/p&gt;
+
+&lt;h2&gt;Task A&lt;/h2&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;&lt;img src=&quot;/tech-blog/assets/images/MOREHANDSOME.png&quot; alt=&quot;More Handsome&quot;&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;&lt;p&gt;Remove the man&amp;#39;s glasses.&lt;/p&gt;&lt;/li&gt;
+&lt;li&gt;&lt;p&gt;Make the man&amp;#39;s face MORE HANDSOME.&lt;/p&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/blockquote&gt;
+
+&lt;h2&gt;Task B&lt;/h2&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;In my logo, there is a &amp;quot;virtual&amp;quot; flight path of an airplane. I have had comments that the virtual flight path goes into the middle of the Pacific Ocean for no reason - not a logical graphic. I want you to &amp;quot;straighten&amp;quot; out the flight path - as shown on the Blue lines in the attached PDF titled &amp;quot;Modified_Logo.PDF.&amp;quot; I still want the flight path lines to be in white, with black triangles separating the segments. I just want the segments to be straighter and not go over the ocean as in the original. Please contact me for any clarification. I am uploading the EPS and AI files as well to make the change. Thank you!&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;How might a human classify these tasks? I would probably classify the first as “image manipulation” and the second as “logo refresh,” although the second could just as easily also be “image manipulation” as well. Already you can see that classifying these sorts of tasks into concrete categories is perhaps going to be more art than science.&lt;/p&gt;
+
+&lt;h1&gt;Figuring out the categories&lt;/h1&gt;
+
+&lt;p&gt;The first major problem is deciding on a sensible set of categories. This has turned out to be more difficult than I first imagined. Customers use Swiftly for a wide range of tasks. Plus, there’s quite a bit of overlap — one Swiftly task is sometimes a combination of multiple small tasks. My initial approach, just to get a feel for the data, was to eyeball 100 task briefs and attempt to invent categories and classify them manually. The result of this process:&lt;/p&gt;
+
+&lt;div align=&quot;center&quot;&gt;
+&lt;table class=&quot;table&quot;&gt;
+&lt;thead&gt;
+&lt;tr&gt; &lt;th&gt;Category &lt;/th&gt; &lt;th&gt; Number of Tasks &lt;/th&gt; &lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Logo Refresh (Holidays) &lt;/td&gt; &lt;td&gt; 34&lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Logo Refresh &lt;/td&gt; &lt;td&gt; 11&lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Copy Change &lt;/td&gt; &lt;td&gt; 11&lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Vectorise &lt;/td&gt; &lt;td&gt; 13&lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Resize/Reformat &lt;/td&gt; &lt;td&gt; 17&lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Transparency &lt;/td&gt; &lt;td&gt; 1&lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Image Manipulation &lt;/td&gt; &lt;td&gt; 10&lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Too hard to classify &lt;/td&gt; &lt;td&gt; 3&lt;/td&gt; &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;/div&gt;
+
+&lt;p&gt;A large number of the instances were hard to classify, even for a human! I was not 100% happy with the categories that I came up with, with many tasks not fitting comfortably in the buckets. I decided to apply some unsupervised machine learning techniques in any attempt to cluster design briefs into logical groups. Can a machine do better?&lt;/p&gt;
+
+&lt;h2&gt;Unsupervised clustering&lt;/h2&gt;
+
+&lt;p&gt;I explored software called &lt;a href=&quot;http://radimrehurek.com/gensim/&quot;&gt;gensim&lt;/a&gt;, an unsupervised natural language processing and topic modelling library for Python. Gensim comes equipped with various powerful topic modeling algorithms, which are capable of extracting a pre-specified number of topics and associating words with those topics. It also helps with converting a corpus of documents into various formats (e.g. vector space model). The main algorithm that I made use of is called Latent Dirichlet Allocation. The first step is converting the text corpus into a model that allows for the application of mathematical operations.&lt;/p&gt;
+
+&lt;h2&gt;The vector space model&lt;/h2&gt;
+
+&lt;p&gt;To apply mathematical-based algorithms to natural language, we need to convert language into a mathematical format. I used a simple model known as the bag-of-words vector space model. This model represents each document as a vector, where each dimension of the vector corresponds to a different word. The value of a word in a particular document is just the number of times it appeared in that particular document. The vector will have &lt;em&gt;n&lt;/em&gt; dimensions, where &lt;em&gt;n&lt;/em&gt; is the total number of terms in the whole collection of documents. Let&amp;#39;s try an example.&lt;/p&gt;
+
+&lt;p&gt;Say we have the following collection of documents:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;The monster looked like a very large bird.&lt;/li&gt;
+&lt;li&gt;The large bird laid very large eggs.&lt;/li&gt;
+&lt;li&gt;The monster&amp;#39;s name was “eggs.”&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;After finding all the unique words (“the,” “monster”, etc.) and assigning them an index in the vector, we can count those words in each document to turn each document into a word frequency vector:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;(1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0)&lt;/li&gt;
+&lt;li&gt;(1, 0, 0, 0, 0, 1, 2, 1, 1, 1, 0, 0)&lt;/li&gt;
+&lt;li&gt;(1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1)&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2&gt;Corpus pre-processing&lt;/h2&gt;
+
+&lt;p&gt;If you just split your text into words on whitespace and apply this naively, the results can be messy. On the one hand text contains punctuation we want to ignore. On the other, this is going to work best when we have lots of words in common between the documents. Do we really want to treat &amp;quot;Egg&amp;quot;, &amp;quot;egg&amp;quot; and &amp;quot;eggs&amp;quot; as different words? To get the best results, you deal with these kinds of problems in a pre-processing step.&lt;/p&gt;
+
+&lt;p&gt;In our pre-processing, we:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;Split the document description into individual tokens (i.e. words)&lt;/li&gt;
+&lt;li&gt;Put tokens into lower case&lt;/li&gt;
+&lt;li&gt;Remove punctuation from start and end of tokens&lt;/li&gt;
+&lt;li&gt;Remove &lt;a href=&quot;http://en.wikipedia.org/wiki/Stop_words&quot;&gt;stop words&lt;/a&gt; (e.g. &amp;quot;and&amp;quot;, &amp;quot;but&amp;quot;, the&amp;quot;, ...)&lt;/li&gt;
+&lt;li&gt;Perform stemming&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Stemming is the process where words are reduced to their “stem” or root format, basically chopping any variation off their end. For example, the words “stemmer,” “stemming” and “stemmed” would all be reduced to just “stem”. I used the nltk implementation of the snowball stemmer to perform this step. All of these steps can be performed very easily in Python:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;nltk&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;PUNCTUATION&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;&quot;&quot;!@#$&lt;/span&gt;&lt;span class=&quot;si&quot;&gt;%&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;^&amp;amp;*()_+=][{}'-&quot;;:/?&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;\&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;.,~`&quot;&quot;&quot;&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;tidy_text&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;task_description&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;s&quot;&gt;&quot;&quot;&quot; Does the following:
+    1. Tokenises words
+    2. Removes punctuation
+    3. Removes stop words
+    4. Puts words through the snowball stemmer&quot;&quot;&quot;&lt;/span&gt;
+
+    &lt;span class=&quot;n&quot;&gt;stemmer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nltk&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stem&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;snowball&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;EnglishStemmer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;stopwords&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;nltk&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;corpus&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stopwords&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;words&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'english'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;n&quot;&gt;outwords&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[]&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;word&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;task_description&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;word&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;word&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strip&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;PUNCTUATION&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;word&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;not&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;stopwords&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;outwords&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stemmer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;word&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;outwords&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Running our earlier bird examples through this function, we get:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'monster'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'look'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'like'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'larg'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'bird'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'larg'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'bird'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'laid'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'larg'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'egg'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'monster'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'name'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'egg'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;This process reduces the noise in the vector space model, because tokens that mean the same thing are assigned the same token (through stemming and punctuation and caps normalisation) and words that probably do not add any meaning are removed (through stop word removal). Eventually, I expected the pre-processing steps to be much more in depth, but for now this should get us started.&lt;/p&gt;
+
+&lt;h2&gt;Latent Dirichlet Allocation (LDA)&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation&quot;&gt;LDA&lt;/a&gt; is an algorithm developed to automatically discover topics contained within a text corpus. Gensim uses an &amp;quot;online&amp;quot; implementation of LDA, which means that it breaks the documents into chunks and regularly updates the LDA model (as opposed to batch which processes the whole corpus at once). It is a generative probabilistic model that uses Bayesian probabilities to assign probabilities that each document in the corpus belongs to a topic. Importantly, the number of topics must be supplied in advance. Since I did not known how many topics might exist, I decided to apply LDA with varying numbers of topics. For example, if we did an LDA with 5 topics, the result for a single document might look like this:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span class=&quot;p&quot;&gt;[(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.0208&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.549&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.0208&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.366&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.0208&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mf&quot;&gt;0.0208&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Which means LDA places that document 2% in topic 0, 55% in topic 1, 20% in topic 2 and so on. For the simple analysis I am doing, I just want the best guess topic. We can convert the result from probabilistic to deterministic by just picking the best guess.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span class=&quot;nb&quot;&gt;max&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;key&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;lambda&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lda_result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lda_result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Much of my approach in the following segments is based on Gensim&amp;#39;s author&amp;#39;s LDA &lt;a href=&quot;http://radimrehurek.com/gensim/wiki.html#latent-dirichlet-allocation&quot;&gt;guides&lt;/a&gt;.&lt;/p&gt;
+
+&lt;h3&gt;Pre-processing for LDA&lt;/h3&gt;
+
+&lt;p&gt;I extracted ~4400 job descriptions from the Swiftly database. I removed formatting of each, and applied the pre-processing steps described above (tokenisation, stemming, stop word removal etc.). The result was a plain text  file, with each pre-processed Swiftly job on a new line, like this:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;within attach illustr file top left window white background we&amp;#39;d like follow item creat use 2 version complet logo also word there vertic version horizont version 1 creat version taglin get organ 2 logo 2 put 4 logo 2 taglin 2 without transpar background&lt;/p&gt;
+
+&lt;p&gt;need make titl look better take text top adjust remain element offic los angel mayor eric garcetti partnership ucla labor center rosenberg foundat california communiti foundat california endow asian americans/pacif island philanthropi cordial invit close recept also add hashtag bottom descriptor dreamsummer13 take rsvp august 19 2013&lt;/p&gt;
+
+&lt;p&gt;need logo revamp want logo look great monogram ex chanel gucci lv etc logo consist letter r&amp;amp;b want classi font letter either back back intertwin ex roll royc logo ysl gucci lv etc&lt;/p&gt;
+
+&lt;p&gt;tri new font similar attach chang colour solid blue rather way edg fade white/light blue look font use www.tradegecko.com logo style font look&lt;/p&gt;
+
+&lt;p&gt;want logo tag line made bigger line logo origin cut close caus distort need logo deliv format includ transpar also imag clear need enhanc&lt;/p&gt;
+
+&lt;p&gt;remov man glass make man face handsom&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;I then used the gensim tools to create the vector model required for LDA. On the recommendation of the gensim authors, I also removed all tokens that only appeared once. The &lt;code&gt;doc2bow&lt;/code&gt; function used in the &lt;code&gt;MyCorpus&lt;/code&gt; class below converts the document into the vector space format discussed above.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span class=&quot;kn&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;gensim&lt;/span&gt; &lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;corpora&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;models&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;similarities&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# pre-process swiftly jobs, each job on a newline&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;CORPUS&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;StemmedStoppedCorpus.txt&quot;&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;corpus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;line&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CORPUS&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;yield&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dictionary&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;doc2bow&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;())&lt;/span&gt;
+
+
+
+    &lt;span class=&quot;c&quot;&gt;# create dictionary mapping between text and ids&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dictionary&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;corpora&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Dictionary&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;line&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CORPUS&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+
+    &lt;span class=&quot;c&quot;&gt;# find words that only appear once in the entire doc set&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;once_ids&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tokenid&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;tokenid&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;docfreq&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dictionary&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dfs&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;iteritems&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;docfreq&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+
+    &lt;span class=&quot;c&quot;&gt;# remove once words&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dictionary&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;filter_tokens&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;once_ids&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;c&quot;&gt;# &quot;compactify&quot; - removes gaps in ID mapping created by removing the once words&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dictionary&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;compactify&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+    &lt;span class=&quot;c&quot;&gt;# save dictionary to file for future use&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dictionary&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;save&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;swiftly_corpus.dict&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;c&quot;&gt;# create a corpus object&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;swiftly_corpus&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;MyCorpus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+
+    &lt;span class=&quot;c&quot;&gt;# store to disk, for later use&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;corpora&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;MmCorpus&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;serialize&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;swiftly_corpus.mm&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;swiftly_corpus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Regarding the above code, the MM file is a file format known as Matrix Market format, which represents a matrix of sparse vectors. The dictionary file above simply maps the &lt;code&gt;word_id&lt;/code&gt; integers that are used in the MM format to the actual word each id represents.&lt;/p&gt;
+
+&lt;h1&gt;Applying LDA&lt;/h1&gt;
+
+&lt;p&gt;Now that the corpus has been stored as a matrix of vectors, we can apply the LDA model and start clustering the Swiftly jobs. This is done with the following lines of code. We can generate different models by changing the &lt;code&gt;num_topics&lt;/code&gt; argument in the &lt;code&gt;ldamodel.LdaModel()&lt;/code&gt; function.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span class=&quot;kn&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;logging&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;gensim&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# pre-processed swiftly data files&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;DICTIONARY&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;swiftly_corpus.dict&quot;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;MM_FILE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;swiftly_corpus.mm&quot;&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# the number of topics to create&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;N_TOPICS&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# set up logging&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;logging&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;basicConfig&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'&lt;/span&gt;&lt;span class=&quot;si&quot;&gt;%(asctime)&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s : &lt;/span&gt;&lt;span class=&quot;si&quot;&gt;%(levelname)&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s : &lt;/span&gt;&lt;span class=&quot;si&quot;&gt;%(message)&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;s'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;level&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;logging&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;INFO&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# load mapping dictionary&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;id2word&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;gensim&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;corpora&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Dictionary&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;load&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DICTIONARY&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# load market matrix file&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;mm&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;gensim&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;corpora&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;MmCorpus&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;MM_FILE&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# create the lda model.  Use Chunks of 500 documents, update model once per chunk analysis, and repeat 3 times.&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;lda&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;gensim&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;models&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ldamodel&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LdaModel&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;corpus&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mm&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;id2word&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;id2word&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;num_topics&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N_TOPICS&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;update_every&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;chunksize&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;500&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;passes&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;c&quot;&gt;# save the results&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;lda&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;save&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;swiftly_lda{0}_model.lda&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N_TOPICS&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LDA&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Results&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;We can use gensim&amp;#39;s &lt;code&gt;lda.showtopics()&lt;/code&gt; method to get a sense of the different clusters that LDA has picked out.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span class=&quot;k&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;LDA where K = {0}&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N_TOPICS&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lda&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;show_topics&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;topics&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N_TOPICS&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;topn&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;20&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;log&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;False&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;formatted&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;bp&quot;&gt;True&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;TOPIC {0}: {1}&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Where &lt;code&gt;N_TOPICS = 6&lt;/code&gt;, the results are:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-&quot; data-lang=&quot;&quot;&gt;LDA where K = 6
+
+TOPIC 0: 0.033*logo + 0.028*holiday + 0.025*busi + 0.023*name + 0.021*card + 0.020*chang + 0.019*follow + 0.013*christma + 0.011*incorpor + 0.009*font + 0.009*compani + 0.008*attach + 0.008*line + 0.008*text + 0.007*need + 0.007*replac + 0.007*like + 0.007*2 + 0.006*1 + 0.006*would
+
+TOPIC 1: 0.032*background + 0.029*like + 0.020*logo + 0.020*imag + 0.018*white + 0.018*make + 0.018*need + 0.018*would + 0.017*look + 0.016*color + 0.013*transpar + 0.013*font + 0.012*text + 0.012*black + 0.012*use + 0.010*chang + 0.010*want + 0.010*word + 0.010*one + 0.009*also
+
+TOPIC 2: 0.049*logo + 0.042*file + 0.032*exist + 0.032*creativ + 0.029*element + 0.028*fun + 0.028*etc + 0.025*take + 0.024*need + 0.020*add + 0.020*vector + 0.020*festiv + 0.017*snowflak + 0.015*tree + 0.013*attach + 0.013*use + 0.011*ai + 0.010*snow + 0.010*ep + 0.009*convert
+
+TOPIC 3: 0.031*logo + 0.023*need + 0.020*file + 0.016*attach + 0.014*like + 0.014*look + 0.014*color + 0.013*make + 0.012*use + 0.010*imag + 0.010*size + 0.008*would + 0.008*design + 0.008*2 + 0.008*want + 0.008*halloween + 0.007*format + 0.007*version + 0.007*creat + 0.007*chang
+
+TOPIC 4: 0.040*x + 0.031*imag + 0.024*cover + 0.020*px + 0.018*photo + 0.018*app + 0.013*pictur + 0.012*need + 0.011*size + 0.010*book + 0.009*icon + 0.009*screen + 0.008*googl + 0.008*73 + 0.008*2 + 0.007*attach + 0.007*suppli + 0.007*psd + 0.006*back + 0.006*chang
+
+TOPIC 5: 0.055*celebr + 0.049*add + 0.029*decor + 0.027*logo + 0.024*take + 0.017*banner + 0.015*facebook + 0.014*bottom + 0.014*pumpkin + 0.013*profil + 0.012*bat + 0.012*spooki + 0.012*skeleton + 0.011*side + 0.010*right + 0.009*text + 0.009*say + 0.008*pictur + 0.008*element + 0.008*etc
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The number before each token represents how discriminating that token is for the category. Ideally, by eyeballing the discrimiating tokens for a topic we could understand and identify it, giving it a useful name. As you can see, this proved to be difficult. I suspected that there are probably more than six unique categories of tasks on Swiftly, so I run LDA with &lt;code&gt;N_TOPICS&lt;/code&gt; set to different numbers. With 15 (this time just top 10 words, without numbers, formatted into a table for easier comprehension), the results are:&lt;/p&gt;
+
+&lt;table class=&quot;table&quot; style=&quot;font-size: 14px&quot;&gt;
+&lt;thead&gt;
+&lt;tr&gt; &lt;th&gt;TOPIC&lt;br/&gt;1 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;2 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;3 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;4 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;5 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;6 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;7 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;8 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;9 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;10 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;11 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;12 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;13 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;14 &lt;/th&gt; &lt;th&gt;TOPIC&lt;br/&gt;15 &lt;/th&gt; &lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt; &lt;td&gt;imag &lt;/td&gt; &lt;td&gt; need &lt;/td&gt; &lt;td&gt; element &lt;/td&gt; &lt;td&gt; tree &lt;/td&gt; &lt;td&gt; yellow &lt;/td&gt; &lt;td&gt; creativ &lt;/td&gt; &lt;td&gt; celebr &lt;/td&gt; &lt;td&gt; file &lt;/td&gt; &lt;td&gt; like &lt;/td&gt; &lt;td&gt; chang &lt;/td&gt; &lt;td&gt; festiv &lt;/td&gt; &lt;td&gt; logo &lt;/td&gt; &lt;td&gt; need &lt;/td&gt; &lt;td&gt; name &lt;/td&gt; &lt;td&gt; x &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;file &lt;/td&gt; &lt;td&gt; imag &lt;/td&gt; &lt;td&gt; exist &lt;/td&gt; &lt;td&gt; snow &lt;/td&gt; &lt;td&gt; use &lt;/td&gt; &lt;td&gt; take &lt;/td&gt; &lt;td&gt; logo &lt;/td&gt; &lt;td&gt; background &lt;/td&gt; &lt;td&gt; look &lt;/td&gt; &lt;td&gt; color &lt;/td&gt; &lt;td&gt; pdf &lt;/td&gt; &lt;td&gt; card &lt;/td&gt; &lt;td&gt; attach &lt;/td&gt; &lt;td&gt; follow &lt;/td&gt; &lt;td&gt; cover &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;pictur &lt;/td&gt; &lt;td&gt; attach &lt;/td&gt; &lt;td&gt; etc &lt;/td&gt; &lt;td&gt; santa &lt;/td&gt; &lt;td&gt; view &lt;/td&gt; &lt;td&gt; add &lt;/td&gt; &lt;td&gt; decor &lt;/td&gt; &lt;td&gt; logo &lt;/td&gt; &lt;td&gt; snowflak &lt;/td&gt; &lt;td&gt; blue &lt;/td&gt; &lt;td&gt; send &lt;/td&gt; &lt;td&gt; christma &lt;/td&gt; &lt;td&gt; page &lt;/td&gt; &lt;td&gt; busi &lt;/td&gt; &lt;td&gt; photo &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;like &lt;/td&gt; &lt;td&gt; size &lt;/td&gt; &lt;td&gt; logo &lt;/td&gt; &lt;td&gt; thanksgiv &lt;/td&gt; &lt;td&gt; new &lt;/td&gt; &lt;td&gt; fun &lt;/td&gt; &lt;td&gt; make &lt;/td&gt; &lt;td&gt; holiday &lt;/td&gt; &lt;td&gt; logo &lt;/td&gt; &lt;td&gt; code &lt;/td&gt; &lt;td&gt; file &lt;/td&gt; &lt;td&gt; use &lt;/td&gt; &lt;td&gt; imag &lt;/td&gt; &lt;td&gt; logo &lt;/td&gt; &lt;td&gt; like &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;line &lt;/td&gt; &lt;td&gt; file &lt;/td&gt; &lt;td&gt; icon &lt;/td&gt; &lt;td&gt; leav &lt;/td&gt; &lt;td&gt; servic &lt;/td&gt; &lt;td&gt; logo &lt;/td&gt; &lt;td&gt; etc &lt;/td&gt; &lt;td&gt; need &lt;/td&gt; &lt;td&gt; would &lt;/td&gt; &lt;td&gt; red &lt;/td&gt; &lt;td&gt; need &lt;/td&gt; &lt;td&gt; font &lt;/td&gt; &lt;td&gt; text &lt;/td&gt; &lt;td&gt; chang &lt;/td&gt; &lt;td&gt; would &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;high &lt;/td&gt; &lt;td&gt; word &lt;/td&gt; &lt;td&gt; halloween &lt;/td&gt; &lt;td&gt; gold &lt;/td&gt; &lt;td&gt; replac &lt;/td&gt; &lt;td&gt; pumpkin &lt;/td&gt; &lt;td&gt; word &lt;/td&gt; &lt;td&gt; vector &lt;/td&gt; &lt;td&gt; color &lt;/td&gt; &lt;td&gt; font &lt;/td&gt; &lt;td&gt; back &lt;/td&gt; &lt;td&gt; attach &lt;/td&gt; &lt;td&gt; websit &lt;/td&gt; &lt;td&gt; incorpor &lt;/td&gt; &lt;td&gt; look &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;resolut &lt;/td&gt; &lt;td&gt; 2 &lt;/td&gt; &lt;td&gt; app &lt;/td&gt; &lt;td&gt; outlin &lt;/td&gt; &lt;td&gt; team &lt;/td&gt; &lt;td&gt; spooki &lt;/td&gt; &lt;td&gt; possibl &lt;/td&gt; &lt;td&gt; transpar &lt;/td&gt; &lt;td&gt; want &lt;/td&gt; &lt;td&gt; dark &lt;/td&gt; &lt;td&gt; page &lt;/td&gt; &lt;td&gt; like &lt;/td&gt; &lt;td&gt; px &lt;/td&gt; &lt;td&gt; compani &lt;/td&gt; &lt;td&gt; suppli &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;photoshop &lt;/td&gt; &lt;td&gt; make &lt;/td&gt; &lt;td&gt; add &lt;/td&gt; &lt;td&gt; make &lt;/td&gt; &lt;td&gt; super &lt;/td&gt; &lt;td&gt; bat &lt;/td&gt; &lt;td&gt; add &lt;/td&gt; &lt;td&gt; white &lt;/td&gt; &lt;td&gt; make &lt;/td&gt; &lt;td&gt; green &lt;/td&gt; &lt;td&gt; digit &lt;/td&gt; &lt;td&gt; creat &lt;/td&gt; &lt;td&gt; pictur &lt;/td&gt; &lt;td&gt; card &lt;/td&gt; &lt;td&gt; 73 &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;layer &lt;/td&gt; &lt;td&gt; logo &lt;/td&gt; &lt;td&gt; like &lt;/td&gt; &lt;td&gt; fall &lt;/td&gt; &lt;td&gt; feel &lt;/td&gt; &lt;td&gt; skeleton &lt;/td&gt; &lt;td&gt; text &lt;/td&gt; &lt;td&gt; png &lt;/td&gt; &lt;td&gt; someth &lt;/td&gt; &lt;td&gt; match &lt;/td&gt; &lt;td&gt; psd &lt;/td&gt; &lt;td&gt; file &lt;/td&gt; &lt;td&gt; use &lt;/td&gt; &lt;td&gt; line &lt;/td&gt; &lt;td&gt; websit &lt;/td&gt; &lt;/tr&gt;
+&lt;tr&gt; &lt;td&gt;hand &lt;/td&gt; &lt;td&gt; 1 &lt;/td&gt; &lt;td&gt; theme &lt;/td&gt; &lt;td&gt; turkey &lt;/td&gt; &lt;td&gt; color &lt;/td&gt; &lt;td&gt; offer &lt;/td&gt; &lt;td&gt; bit &lt;/td&gt; &lt;td&gt; ai &lt;/td&gt; &lt;td&gt; font &lt;/td&gt; &lt;td&gt; panton &lt;/td&gt; &lt;td&gt; version &lt;/td&gt; &lt;td&gt; busi &lt;/td&gt; &lt;td&gt; photo &lt;/td&gt; &lt;td&gt; replac &lt;/td&gt; &lt;td&gt; templat &lt;/td&gt; &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;At this point, I realised that more pre-processing would be requried to get this right. For instance, it seemed strange that in topic 15 the most discriminating word is &amp;#39;x&amp;#39;. Looking closer, I realised that this is because topic 15 represents a resize / reformatting job brief. The &amp;#39;x&amp;#39; gets picked out because a large number of customers are specifying dimensions (e.g. 200px x 500px). I was also surprised to find out that &amp;#39;73&amp;#39; was so discriminating, but a little bit of digging revealed that a twitter profile picture is 73x73 pixels. To address this problem, I plan to use a preprocessing step called &lt;a href=&quot;http://en.wikipedia.org/wiki/Lemmatisation&quot;&gt;Lemmatisation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Lemmatisation is useful for grouping things like numbers, colours, URLs, email addresses and image dimensions together so that different values are treated equally. For example, if there is a specific colour mentioned in a brief, we don&amp;#39;t really care what the specific colour is—we just care that the brief mentions a colour. In our case, we believe that a brief containing a colour (e.g. #FF00FF) or image dimensions (e.g. 400x300) might give us clues about what type of task it is so we convert anything that looks like these to the tokens &lt;code&gt;$COLOUR&lt;/code&gt; and &lt;code&gt;$DIM&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Despite the shortcomings of my pre-processing, this clustering task has picked out some interesting topics! Some, as is probably inevitable, are &amp;quot;junk topics&amp;quot;. Further, seasonal words seem to appear in lots of topics, which is a strange result. Despite this, many of the topics are classifiable. Topic 5 was interesting, where &amp;#39;yellow&amp;#39; was such a discriminating term. A very quick (and non-scientific) review of the data suggests that people often do not like the colour yellow (I agree with them!) and want it changed. An attempt to name the topics from the table above:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Topic 1: Change an image so it’s in higher resolution&lt;/li&gt;
+&lt;li&gt;Topic 3: Change or create a logo or icon, perhaps for a smartphone app&lt;/li&gt;
+&lt;li&gt;Topic 4: Edits of a seasonal nature (Christmas, Thanksgiving)&lt;/li&gt;
+&lt;li&gt;Topic 5: Replace yellow (?!)&lt;/li&gt;
+&lt;li&gt;Topic 6: Halloween edits&lt;/li&gt;
+&lt;li&gt;Topic 8: Vectorisation task, e.g. “take this png file, turn it into a vector on a transparent background&amp;quot;&lt;/li&gt;
+&lt;li&gt;Topic 10: Change a colour in some way, often a font. &amp;quot;Panton&amp;quot; is a stemmed form of &amp;quot;pantone&amp;quot;, a popular colour chart&lt;/li&gt;
+&lt;li&gt;Topic 14: Change copy or update information on a business card&lt;/li&gt;
+&lt;li&gt;Topic 15: Resize or reformat a photo, often for social media purposes&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Having to provide the number of topics to LDA, before you even know what&amp;#39;s reasonable, feels like a chicken-and-egg problem. It&amp;#39;s possible to try different numbers of topics and eyeball the results, but at times it felt a bit too much like guesswork. Nevertheless, I view these results as a decent &amp;quot;proof of concept&amp;quot;. It&amp;#39;s reassuring that a computer can find categories like this, and suggests that with more tweaking and a nicely labelled dataset, the job of automatically classifying Swiftly task briefs is entirely possible!&lt;/p&gt;
+
+&lt;h1&gt;Next time...&lt;/h1&gt;
+
+&lt;p&gt;That wraps up my experiments with unsupervised classification for this post. Next time, I plan to discuss my efforts after I settle on the Swiftly categories. I’d like to develop a nice labelled training data set (most likely using Amazon&amp;#39;s Mechanical Turk service), and then experiment with supervised machine learning techniques. I will also detail my efforts at a developing a more sophisticated pre-processing procedure. Tune in!&lt;/p&gt;
+
+&lt;div class=&quot;aboutbox&quot;&gt;
+&lt;h2&gt;About Daniel&lt;/h2&gt;
+&lt;p&gt;Daniel Williams is a Bachelor of Science (Computing and Software Science) student at the University of Melbourne and Research Assistant at the Centre for Neural Engineering where he applies Machine Learning techniques to the search for genetic indicators of Schizophrenia. He also serves as a tutor at the Department of Computing and Information Systems. Daniel was one of four students selected to take part in the inaugural round of Tin Alley Beta summer internships. Daniel is an avid eurogamer, follower of &quot;the cricket&quot;, and hearty enjoyer of the pub.&lt;/p&gt;
+&lt;/div&gt;
+</description>
+        <pubDate>Wed, 22 Jan 2014 00:00:00 +1100</pubDate>
+        <link>https://99designs.com/tech-blog/blog/2014/01/22/Swiftly-Machine-Learning-1/</link>
+        <guid isPermaLink="true">https://99designs.com/tech-blog/blog/2014/01/22/Swiftly-Machine-Learning-1/</guid>
+        
+        
+        <category>dev</category>
+        
+        <category>python</category>
+        
+        <category>swiftly</category>
+        
+        <category>machinelearning</category>
+        
+      </item>
+    
+  </channel>
+</rss>

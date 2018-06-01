@@ -1,0 +1,1254 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  
+  <title>8th Light Blog</title>
+  <link href="https://8thlight.com/blog/feed/atom.xml" rel="self"/>
+  <link href="https://8thlight.com/blog/"/>
+  <icon>https://8thlight.com/blog/assets/favicon-a28afb7be9f0a79bd7a19fc614e2b58e9de3fa8b45b77e0d8e1a790446d9024a.ico</icon>
+  <updated>2018-05-30T13:50:38-05:00</updated>
+  <id>https://8thlight.com/blog/</id>
+
+  
+    <entry>
+      <title>The Hypermedia Maturity Model</title>
+      <link href="https://8thlight.com/blog/jason-desrosiers/2018/05/30/the-hypermedia-maturity-model.html"/>
+      <updated>2018-05-30T00:00:00-05:00</updated>
+      <id>https://8thlight.com/blog/jason-desrosiers/2018/05/30/the-hypermedia-maturity-model.html</id>
+
+      
+        <category term="Hypermedia" />
+      
+        <category term="Architecture" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/jason-desrosiers-969ee35cdc9261d69af6ec2834e9303df9993ab593ce5317dbe7ea4cb365bd8d.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Jason Desrosiers</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;&lt;em&gt;This is part three in a series about hypermedia and REST. You don&amp;#39;t need to read the previous post to follow this one, but if you like this and want to read more or prefer to start at the beginning, check out &lt;a href=&quot;/blog/tags/hypermedia.html&quot;&gt;the full series&lt;/a&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;When people first started trying to apply the REST architectural style to their APIs, there was a lot of confusion about what a REST API should look like. The Richardson Maturity Model (RMM) has been a valuable set of guide posts to help us on our journey toward understanding REST. RMM is a classification model that defines four levels, 0-3. As you go up the levels more of the formal definition of REST is taken into account. Here they are very briefly.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Level 0&lt;/strong&gt; APIs pipe all requests through one URI and one HTTP method (usually POST).&lt;br&gt;
+&lt;strong&gt;Level 1&lt;/strong&gt; APIs employ many URIs, but still only use one HTTP method (usually POST).&lt;br&gt;
+&lt;strong&gt;Level 2&lt;/strong&gt; APIs have URIs that represent resources and use the HTTP methods to perform CRUD operations on those resources.&lt;br&gt;
+&lt;strong&gt;Level 3&lt;/strong&gt; APIs use self descriptive messages that include hypermedia controls to drive the API.  &lt;/p&gt;
+
+&lt;p&gt;Today, we&amp;#39;ve pretty much settled on what a Level 2 REST API should look like, but when it comes to Level 3 REST APIs, there&amp;#39;s still a lot of uncertainty. People hear about Hypermedia APIs and want to implement hypermedia, but they don&amp;#39;t know what a Hypermedia API should look like. The Hypermedia Maturity Model (HMM) takes RMM Level 3 and splits it into four additional levels. As you go up the levels, the API becomes more and more self-descriptive.&lt;/p&gt;
+
+&lt;p&gt;An API is self-descriptive if you don&amp;#39;t need to consult documentation to know how to use the API. Like an HTML browser, it should be possible to navigate a Hypermedia API without any out-of-band information such as documentation.&lt;/p&gt;
+
+&lt;h2&gt;HMM Level 0&lt;/h2&gt;
+
+&lt;p&gt;At this level, a representation would include URIs referencing another resource, but they are just strings with no semantics that allow a client application (like a web browser) to recognize it as a link and processes it as such. To a computer, these URLs are just strings. Documentation is needed to know that these values are links and should be followed. Imagine HTML with no &lt;code&gt;&amp;lt;a&amp;gt;&lt;/code&gt; tag. You can have the URIs as text on the page, but you would have to manually copy and paste them into the URL bar in order to navigate. An API that uses plain JSON with some of the values being URLs is Level 0.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-http&quot; data-lang=&quot;http&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;HTTP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1.1&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;200&lt;/span&gt; &lt;span class=&quot;ne&quot;&gt;OK&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;Content-Type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;l&quot;&gt;application/json&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;id&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;title&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;My Blog Post&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;content&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;...&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;author&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/author/1&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;comments&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/blog/23/comments&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2&gt;HMM Level 1&lt;/h2&gt;
+
+&lt;p&gt;The next step is to use a media type that defines constructs that allow a computer to recognize certain elements as links. The &lt;code&gt;&amp;lt;a&amp;gt;&lt;/code&gt; tag in HTML is an example. Instead of exposing bare URLs to the user, a user agent (web browser) can display these as links that users can click on to get to related resources.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://stateless.co/hal_specification.html&quot;&gt;HAL&lt;/a&gt; is a media type that is an example of a Level 1 API. It&amp;#39;s mostly plain JSON, but it adds a few fields that have special meaning. One of those fields is &lt;code&gt;_links&lt;/code&gt;, which describes the links a user can choose to follow.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-http&quot; data-lang=&quot;http&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;HTTP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1.1&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;200&lt;/span&gt; &lt;span class=&quot;ne&quot;&gt;OK&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;Content-Type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;l&quot;&gt;application/hal+json&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;id&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;title&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;The Hypermedia Maturity Model&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;content&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;...&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;_links&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;quot;self&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/blog/23&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;quot;author&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/author/1&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;quot;comment&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/blog/23/comment&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+   &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2&gt;HMM Level 2&lt;/h2&gt;
+
+&lt;p&gt;Level 1 APIs are sufficiently self-describing for read-only APIs, but they are lacking when user input is required. If you need to send data to the server, you have to consult the documentation to learn how to send the message. Imagine HTML without a &lt;code&gt;&amp;lt;form&amp;gt;&lt;/code&gt; tag. You would have to consult the website&amp;#39;s documentation in order to know how to construct a request to send data to the server.&lt;/p&gt;
+
+&lt;p&gt;To be Level 2, you need a hypermedia format that can describe how to send data to the server. In other words, it should have a feature that at least loosely resembles an HTML &lt;code&gt;&amp;lt;form&amp;gt;&lt;/code&gt;. HTML Forms are self-describing in many ways. Using a &lt;code&gt;&amp;lt;form method=&amp;quot;post&amp;quot;&amp;gt;&amp;lt;/form&amp;gt;&lt;/code&gt; indicates that the HTTP &lt;code&gt;POST&lt;/code&gt; method will be used to make the request and the body will be encoded in the &lt;code&gt;application/x-www-form-urlencoded&lt;/code&gt; format. The user of the form doesn&amp;#39;t need to know any of these details because it&amp;#39;s all taken care of by the web browser. The web browser can do this because HTML Forms are based on well-defined standards that govern how they behave.&lt;/p&gt;
+
+&lt;p&gt;But, HTML Forms don&amp;#39;t just describe the &amp;quot;how&amp;quot; of a request, they also describe the &amp;quot;what.&amp;quot; The &lt;code&gt;&amp;lt;input&amp;gt;&lt;/code&gt; tags within the &lt;code&gt;&amp;lt;form&amp;gt;&lt;/code&gt; tag describes the structure of the data that is expected by the server. We don&amp;#39;t have to consult the server&amp;#39;s documentation to know what data to send.&lt;/p&gt;
+
+&lt;p&gt;These days there are many examples of Level 2 media types, including &lt;a href=&quot;http://json-schema.org/latest/json-schema-hypermedia.html&quot;&gt;JSON Hyper-Schema&lt;/a&gt;, &lt;a href=&quot;https://github.com/kevinswiber/siren&quot;&gt;Siren&lt;/a&gt;, &lt;a href=&quot;http://amundsen.com/media-types/collection/&quot;&gt;Collection+JSON&lt;/a&gt;, and many more. Each of these media types has a different way of being self-descriptive. JSON Hyper-Schema uses JSON Schema, which is good for describing and validating complex request structures. Siren, on the other hand, takes an approach inspired by HTML. In the example below, you will see &lt;code&gt;actions&lt;/code&gt; that if you squint look a lot like HTML Forms.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-http&quot; data-lang=&quot;http&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;HTTP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1.1&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;200&lt;/span&gt; &lt;span class=&quot;ne&quot;&gt;OK&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;Content-Type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;l&quot;&gt;application/siren+json&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;class&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;blog&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;properties&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;quot;id&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;23&lt;/span&gt;
+      &lt;span class=&quot;s2&quot;&gt;&amp;quot;title&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;The Hypermedia Maturity Model&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;quot;content&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;...&amp;quot;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;links&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;self&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/blog23&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;author&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/author/1&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;comment&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/blog/23/comment&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;],&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;actions&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;quot;name&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;add-comment&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;quot;method&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;POST&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/blog/23/comment&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;quot;fields&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;name&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;blog_id&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;type&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;hidden&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;value&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;23&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;name&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;author&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;type&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;text&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;name&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;text&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;type&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;text&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+      &lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2&gt;HMM Level 3&lt;/h2&gt;
+
+&lt;p&gt;Level 2 is sufficient for most APIs, but it&amp;#39;s possible to take the concept of self-descriptiveness to another level. In a Level 3 API, a resource doesn&amp;#39;t just describe the actions you can take, it also describes the data itself. Just like how we said in Level 0 that a URI is just a meaningless string to a computer, property names like &amp;quot;title&amp;quot; or &amp;quot;author&amp;quot; also have no meaning. By using a shared vocabulary, such as the one defined by &lt;a href=&quot;http://schema.org&quot;&gt;Schema.org&lt;/a&gt;, your data now has meaning that can be understood by other servers using the same vocabulary.&lt;/p&gt;
+
+&lt;p&gt;When your data is self-descriptive, you have the possibility of automating interactions between systems that usually require humans to translate between the two systems. A form could be filled in automatically because the server knows how the data it has matches up to the form data being requested. This concept could be especially useful in IOT where you have many independently designed devices generating data that can communicate dynamically because all of the devices speak the same language.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://json-ld.org/&quot;&gt;JSON-LD (JSON for Linked Data)&lt;/a&gt; is a media type that enables Level 3 style self-description of data. JSON-LD uses vocabularies to give a shared semantic meaning to all of your JSON property names. A fairly large and widely used vocabulary is &lt;a href=&quot;http://schema.org&quot;&gt;Schema.org&lt;/a&gt;. The following is an example of a JSON-LD document.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-http&quot; data-lang=&quot;http&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;HTTP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1.1&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;200&lt;/span&gt; &lt;span class=&quot;ne&quot;&gt;OK&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;Content-Type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;l&quot;&gt;application/ld+json&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nd&quot;&gt;&amp;quot;@id&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/blog/23&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nd&quot;&gt;&amp;quot;@type&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;http://schema.org/BlogPosting&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;http://schema.org/headline&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;The Hypermedia Maturity Model&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;http://schema.org/content&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;...&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;http://schema.org/author&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nd&quot;&gt;&amp;quot;@id&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/author/1&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;http://schema.org/comment&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nd&quot;&gt;&amp;quot;@id&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/api/blog/23/comments&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Although JSON-LD provides a way to link to other JSON-LD documents, it&amp;#39;s not a hypermedia format by itself. It&amp;#39;s missing much of the richness of a true hypermedia format. That&amp;#39;s where Hydra comes in. &lt;a href=&quot;https://www.markus-lanthaler.com/hydra/&quot;&gt;Hyrda&lt;/a&gt; is Level 3 hypermedia format that defines a vocabulary for describing rich hypermedia controls in JSON-LD documents.&lt;/p&gt;
+
+&lt;h2&gt;You&amp;#39;re not doing it wrong&lt;/h2&gt;
+
+&lt;p&gt;The RMM is a model for the REST architectural style. If your API is not Level 3, then it doesn&amp;#39;t fully conform to the REST architectural style. HMM is different. There is no defined architecture we are trying to conform to. In that sense, it&amp;#39;s more of a categorization model than a maturity model. You&amp;#39;re not doing it wrong because your API is not HMM level 3. Not every application needs that level of self descriptiveness. A mostly read-only API doesn&amp;#39;t need to use a Level 2-capable media type. If your API will be consumed primarily by humans, as with HTML, there isn&amp;#39;t a lot of value in Level 3 self-descriptive data because humans can interpret natural language text just fine.&lt;/p&gt;
+
+&lt;p&gt;However, when deciding how much self-descriptiveness you need, remember that the more self-descriptive your API, the more powerful your tools can be. Think of a web browser. We can interact with a website without knowing anything about HTML, HTTP, URI, etc because it&amp;#39;s self-descriptive enough that the browser can abstract away all the technical details. Currently, we don&amp;#39;t have tooling at that level for working with APIs, but as the tools mature, hypermedia will become even more valuable.&lt;/p&gt;
+
+&lt;h2&gt;What&amp;#39;s Next&lt;/h2&gt;
+
+&lt;p&gt;In this series, we&amp;#39;ve been focusing on hypermedia, but in the next post we&amp;#39;ll take a step back and do a deep dive on the REST architectural style.&lt;/p&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>Diagnosing Problems Quickly</title>
+      <link href="https://8thlight.com/blog/sarah-sunday/2018/05/21/diagnosing-problems-quickly.html"/>
+      <updated>2018-05-21T00:00:00-05:00</updated>
+      <id>https://8thlight.com/blog/sarah-sunday/2018/05/21/diagnosing-problems-quickly.html</id>
+
+      
+        <category term="Bugs" />
+      
+        <category term="Support" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/sarah-sunday-2ba67590d742b1c27626b5ec10f430cfaa187c63dcdcc1fe8541ec24bc57844b.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Sarah Sunday</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;Everything is on fire.&lt;/p&gt;
+
+&lt;p&gt;Okay, not really. One thing is on fire. Or is it?&lt;/p&gt;
+
+&lt;p&gt;You have no idea. The client knows. The client knows that everyone is screaming and nothing is happening and the dollar signs are evaporating. More are going to go the way of the dinosaur unless &lt;em&gt;you&lt;/em&gt; the developer on call/duty, do something. And quickly!&lt;/p&gt;
+
+&lt;p&gt;But how? How do you respond quickly to something breaking? How do you get everything sorted?&lt;/p&gt;
+
+&lt;h2&gt;Error Logs&lt;/h2&gt;
+
+&lt;p&gt;Well, if you have error reporting services, you&amp;#39;re one step ahead. Services like &lt;a href=&quot;https://sentry.io/&quot;&gt;Sentry&lt;/a&gt; and &lt;a href=&quot;https://rollbar.com/&quot;&gt;Rollbar&lt;/a&gt; can tell you when the error happened, what browser, and a tracelog of said error.&lt;/p&gt;
+
+&lt;p&gt;Of course, that just tells you where it happened...it being an actual thrown error. What blew up where. But not &lt;em&gt;how&lt;/em&gt;. How did all the parts and cogs of your well-oiled machine screw up so that right in that particular place in the code it just came falling apart?&lt;/p&gt;
+
+&lt;h2&gt;Follow the Data&lt;/h2&gt;
+
+&lt;p&gt;Data is usually the key. Something&amp;#39;s expecting one thing but got another. Tracing through the function calls to get to the origin will tell you what data is the problematic one. The tracelog is your friend. The exact url or API hit that made it happen is another. If the url requested has an ID of a record, or your error reporting service includes that crucial data.&lt;/p&gt;
+
+&lt;p&gt;If you have the ID, you can retrace all the steps and find out what transformation or merely what value is &amp;#39;bad&amp;#39;. Go into the database, open up a rails console or whatever shell you have to access the data as the application sees it, and see what&amp;#39;s lurking underneath the layers. Maybe the answer is simply there. If it is, easy as updating and retrying the activity.&lt;/p&gt;
+
+&lt;p&gt;Congrats, that&amp;#39;s probably the easiest bug there is. Asides from a face-palm-error of just messing up a function call chain or something. Simple stuff. Didn&amp;#39;t even break a sweat.&lt;/p&gt;
+
+&lt;h2&gt;Tracing through the Stack&lt;/h2&gt;
+
+&lt;p&gt;The real tricky one is a bug that&amp;#39;s not a bug (i.e a feature...er no). It&amp;#39;s incorrect functionality. The wrong business-thing is happening. The app thinks it&amp;#39;s doing the right work, but at the end of the day, the end-user is saying...this is &lt;em&gt;wrong&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p&gt;In which case, the steps are similar, but you don&amp;#39;t get the tracelog. You know where it starts. Maybe you kind of know where it ends.&lt;/p&gt;
+
+&lt;p&gt;Where it starts is where you start. Granted you can replicate it locally, start picking apart the process from there. If it&amp;#39;s the frontend acting up, start console logging out the actions. What functions are being called where. Order of operations. What data is where and how it transforms—or doesn&amp;#39;t.&lt;/p&gt;
+
+&lt;p&gt;Then you start logging in the controller or the call endpoint. Where frontend slams into the backend. Log what&amp;#39;s there. Then all the steps as it transfers through the system until it gets to its end. Does that sound straight forward? It is.&lt;/p&gt;
+
+&lt;p&gt;Wherever in the system you find are where things are going haywire is where your process and journey will truly get wonky. Especially if it&amp;#39;s a very narrow use case or some weird quirk. But still, logging every step is the best way to figure out what&amp;#39;s going on. If you can &lt;code&gt;pry&lt;/code&gt; open the process locally, even better. Locally—implying that the problem is reproduceable locally.&lt;/p&gt;
+
+&lt;h2&gt;Production-only Problems&lt;/h2&gt;
+
+&lt;p&gt;If it&amp;#39;s in production...check the network tab in Chrome. See what calls to the backend are being made, what&amp;#39;s being sent, and what&amp;#39;s being returned. The network tab is a great tool in general for troubleshooting—especially if you have no idea what is talking to what. The network tab shows endpoints, it shows you returned data (or error). It&amp;#39;s invaluable in determining how the frontend and the backend aren&amp;#39;t cooperating together.&lt;/p&gt;
+
+&lt;h2&gt;Know Thy Enemy&lt;/h2&gt;
+
+&lt;p&gt;These are some of the steps for what to do once you have a vague idea of a problem. Before that, you need to ask your client or a user experiencing the problem specific questions. Where is this happening? Can you screenshot what is wrong? If you can even get them to screenshot the console log in their browser or the network tab, you&amp;#39;ve got a wealth of data to trace the problem back through. Ask the specific record being modified. If all you have to go on is &amp;quot;this page isn&amp;#39;t working&amp;quot; you&amp;#39;re going to get nowhere fast—don&amp;#39;t even bother looking into it unless you have some other clue confirming something is happening. The absolute best case is when you can screenshare with the user experiencing it. Then you can do the troubleshooting while it&amp;#39;s actually happening instead of hoping to find some way to replicate it.&lt;/p&gt;
+
+&lt;h2&gt;Where You Go From Here&lt;/h2&gt;
+
+&lt;p&gt;So, troubleshooting effectively can be reduced to thus:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;Know the problem. Acquire detail.&lt;/li&gt;
+&lt;li&gt;Find accessory evidence for the problem. Logs, error messages, etc. Find the original data being used.&lt;/li&gt;
+&lt;li&gt;If you can reproduce it locally, log every step of the way through the application.&lt;/li&gt;
+&lt;li&gt;If you can&amp;#39;t replicate it locally, check network tabs on the production record. Speak to the client/user to find out what is happening where, what they do to get the error, and understand the data being used to do that work. Maybe create a copy locally or on a staging server to test with.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;If you use these steps and find out the problem, congrats! Refine the process as you encounter more issues and get smarter about things that seem &amp;#39;smelly&amp;#39;. As in, follow your gut a bit. If you think X is the culprit after all your experience, check it out. Your instincts are valuable in the troubleshooting process. Don&amp;#39;t discount them. Use them to find that bug and crush it.&lt;/p&gt;
+
+&lt;p&gt;The act of crushing, as in, fixing your system...well, no list or blog post is going to give you 100% of the solution. That&amp;#39;s for &lt;em&gt;you&lt;/em&gt; to figure out.&lt;/p&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>Decoupling the Client and Server with Hypermedia</title>
+      <link href="https://8thlight.com/blog/jason-desrosiers/2018/04/11/decoupling-the-client-and-server-with-hypermedia.html"/>
+      <updated>2018-04-11T00:00:00-05:00</updated>
+      <id>https://8thlight.com/blog/jason-desrosiers/2018/04/11/decoupling-the-client-and-server-with-hypermedia.html</id>
+
+      
+        <category term="Hypermedia" />
+      
+        <category term="Architecture" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/jason-desrosiers-969ee35cdc9261d69af6ec2834e9303df9993ab593ce5317dbe7ea4cb365bd8d.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Jason Desrosiers</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;&lt;em&gt;This is part two in a series about hypermedia and REST. You don&amp;#39;t need to read the previous post to follow this one, but if you like this and want to read more or prefer to start at the beginning, check out &lt;a href=&quot;/blog/tags/hypermedia.html&quot;&gt;the full series&lt;/a&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;Hypermedia is an old idea that dates back to at least the 1940s. The first proposal of a hypermedia system was in 1945 when Vannevar Bush proposed a system he called Memex. Despite being implemented with microfilm, Memex would be capable of things like indexing and searching linked content. The term hypermedia was coined in 1963 by Ted Nelson. Over the years there have been several implementations of hypermedia systems, but the concept didn&amp;#39;t really explode until the early &amp;#39;90s when Tim Berners-Lee brought us the World Wide Web.&lt;/p&gt;
+
+&lt;h2&gt;Hypermedia and REST&lt;/h2&gt;
+
+&lt;p&gt;In a future post we&amp;#39;ll get into the details of the formal definition of the REST architectural style and where hypermedia fits into that definition. But for now we&amp;#39;ll use the &lt;a href=&quot;https://martinfowler.com/articles/richardsonMaturityModel.html&quot;&gt;Richardson Maturity Model (RMM)&lt;/a&gt; as a proxy to see where hypermedia fits into REST. RMM is a classification model for REST APIs. There are four levels, 0-3. As you go up the levels, more of the formal definition of REST is taken into account. Here they are very briefly.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Level 0&lt;/strong&gt; APIs pipe all requests through one URI and one HTTP method (usually &lt;code&gt;POST&lt;/code&gt;).&lt;br&gt;
+&lt;strong&gt;Level 1&lt;/strong&gt; APIs employ many URIs, but still only use one HTTP method (usually &lt;code&gt;POST&lt;/code&gt;).&lt;br&gt;
+&lt;strong&gt;Level 2&lt;/strong&gt; APIs have URIs that represent resources and use the HTTP methods to perform CRUD operations on those resources.&lt;br&gt;
+&lt;strong&gt;Level 3&lt;/strong&gt; APIs use self-descriptive messages that include hypermedia controls to drive the API.  &lt;/p&gt;
+
+&lt;h2&gt;Decoupling Client and Server&lt;/h2&gt;
+
+&lt;p&gt;Level 2 is the REST we are most familiar with. In Level 3, we do all the Level 2 stuff, except we use a media type that allows us to define hypermedia controls. The benefit we get from using hypermedia is that we decouple the client from the server. The responsibility of knowing how different resources fit together and how the system changes state moves from the client to the server. This means that the server has much more freedom to change because changes to the server don&amp;#39;t require changes to the client. On the web, the client is the browser.&lt;/p&gt;
+
+&lt;p&gt;This property is what has made the web such a popular platform for application development. With web applications, we no longer need to worry about distributing new copies of our application or getting people to upgrade. If you fix a bug or build a new feature, just update your server and everyone who uses your web application is immediately upgraded to the latest version. Users use the same browsers with the new version as they did with the old version and don&amp;#39;t have to do anything to get the update.&lt;/p&gt;
+
+&lt;h2&gt;A RESTful Mobile Platform&lt;/h2&gt;
+
+&lt;p&gt;Imagine we are creating a mobile app that is backed by a typical API. One part of our app collects some information from the user and sends a request to our API. Now assume we want to add something to the set of information we are collecting. If our API uses hypermedia, the mobile app should be building the form the user fills out dynamically from what it gets from hypermedia controls sent by the server. We can make the change on the server side and the mobile app will get the changes immediately, just like it does with the web. Without hypermedia we have to wait a few weeks for the App Store to approve changes, and then wait some more for all of our users to update the app on their devices to the latest version.&lt;/p&gt;
+
+&lt;p&gt;If mobile platforms were built as REST architectures, the mobile platform would provide a hypermedia format (similar to HTML) that is optimized to build interfaces with native mobile controls. This format would include direct access to things like cameras, sensors, and location services. One of the reasons web applications running on mobile tend to be slower than native mobile apps is because they are a web platform running on top of a mobile platform. A mobile-native REST architecture would not only be optimized for mobile, but also allow you to use the mobile platform&amp;#39;s native language (such as Kotlin or Swift) as opposed to JavaScript like you would on a web platform.&lt;/p&gt;
+
+&lt;h2&gt;What is Hypermedia?&lt;/h2&gt;
+
+&lt;p&gt;We&amp;#39;ve talked a lot about what hypermedia can do, but what is hypermedia exactly? Hypermedia is the concept of a document that includes references to other documents. This allows us to create a graph (or web) of related content. A media type that includes hypermedia controls is called a hypermedia format. The hypermedia format we are all familiar with is HTML. Hypermedia can take many forms, but we&amp;#39;re going to explore its concepts through the familiar constructs we know from HTML.&lt;/p&gt;
+
+&lt;h3&gt;Links&lt;/h3&gt;
+
+&lt;p&gt;On the web, we primarily know links as HTML anchor tags.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-html&quot; data-lang=&quot;html&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;href&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;/author.html&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;Jason Desrosiers&lt;span class=&quot;p&quot;&gt;&amp;lt;/&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;When the browser sees this tag, it knows that it should construct an HTTP request to &lt;code&gt;GET&lt;/code&gt; the resource identified by the &lt;code&gt;href&lt;/code&gt; attribute. The text between the open and close tags is used for UI generation. It gives the user something to click on to trigger the browser to follow the link.&lt;/p&gt;
+
+&lt;h3&gt;Relations&lt;/h3&gt;
+
+&lt;p&gt;The text between the &lt;code&gt;&amp;lt;a&amp;gt;&lt;/code&gt; open and close tags communicates to the user how the linked document relates to the current document. This works well when the user is a human, but when the user is a computer, as it is with a web crawler or an API, we need a more machine-friendly way of knowing what a link refers to. That&amp;#39;s what the &lt;code&gt;rel&lt;/code&gt; attribute is for.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-html&quot; data-lang=&quot;html&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;a&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;rel&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;author&amp;quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;href&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;/author.html&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;Jason Desrosiers&lt;span class=&quot;p&quot;&gt;&amp;lt;/&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;a&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;&lt;code&gt;rel&lt;/code&gt; is short for &amp;quot;relation&amp;quot;. It describes how two documents are related. This link indicates that a document about the author of the current document is available at &lt;code&gt;/author.html&lt;/code&gt;. The &lt;code&gt;rel&lt;/code&gt; attribute can&amp;#39;t be just any string that is convenient. It has to be something with agreed-upon semantics so any user-agent (aka web browser, web crawler, etc) understands them the same way.&lt;/p&gt;
+
+&lt;p&gt;There is a &lt;a href=&quot;https://www.iana.org/assignments/link-relations/link-relations.xhtml&quot;&gt;registry for link relations&lt;/a&gt; that contains all of the official link relations. You can define additional relations to fit your needs, but they must be uniquely identified with a URI. The primary reason for this is to avoid name collisions. If &lt;code&gt;rel&lt;/code&gt; is to be effective as a way for computers to understand what links mean, we need to have agreed-upon semantics for all of these values.&lt;/p&gt;
+
+&lt;p&gt;Before defining your own relation, it&amp;#39;s always a good idea to check that what you need hasn&amp;#39;t already been defined in a vocabulary like &lt;a href=&quot;http://schema.org&quot;&gt;Schema.org&lt;/a&gt;. But, if you do need to define your own relation, it&amp;#39;s recommended that the URI you choose to identify your relation can be used to retrieve documentation that tells your users what it means.&lt;/p&gt;
+
+&lt;h3&gt;Forms&lt;/h3&gt;
+
+&lt;p&gt;At first glance, HTML Forms appear to be a different concept from hyperlinks, but they are actually a variation of the same thing. When the browser sees an anchor tag, it knows to build an HTTP &lt;code&gt;GET&lt;/code&gt; request. When the browser sees a &lt;code&gt;&amp;lt;form method=&amp;quot;post&amp;quot;&amp;gt;&lt;/code&gt; tag it knows to build an HTTP &lt;code&gt;POST&lt;/code&gt; request. It&amp;#39;s the same thing, it&amp;#39;s just used for making a different kind of request.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-html&quot; data-lang=&quot;html&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;form&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;method&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;post&amp;quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;action&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;/comments&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;input&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;text&amp;quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;username&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;textarea&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;comment&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&amp;lt;/&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;textarea&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;button&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;quot;submit&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;Add Comment&lt;span class=&quot;p&quot;&gt;&amp;lt;/&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;button&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;&amp;lt;/&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;form&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;But, an HTML Form does more than specify a URI, it also has &lt;code&gt;&amp;lt;input&amp;gt;&lt;/code&gt; tags that specify what kind of input the resource expects. The browser can use those tags to construct a UI that the user can use to fill out the form. Then, when the form is submitted, the browser knows how to encode the user&amp;#39;s input into a media type that the server understands. In HTML, a form is designed to encode the request using &lt;code&gt;application/x-www-form-urlencoded&lt;/code&gt;.&lt;/p&gt;
+
+&lt;h2&gt;Applying Hypermedia to JSON&lt;/h2&gt;
+
+&lt;p&gt;HTML is great for representing documents, but it&amp;#39;s not great for representing data. So, let&amp;#39;s look at an example of what adding hypermedia controls to a JSON document might look like.&lt;/p&gt;
+
+&lt;h3&gt;Level 2&lt;/h3&gt;
+
+&lt;p&gt;The response from a Level 2 API might look like this.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-http&quot; data-lang=&quot;http&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;HTTP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1.1&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;200&lt;/span&gt; &lt;span class=&quot;ne&quot;&gt;OK&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;Content-Type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;l&quot;&gt;application/json&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;firstName&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;Joe&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;lastName&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;Shmo&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;email&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;jshmo@example.com&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;company&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;Widget Co.&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Because this is from a Level 2 API, there are a number of things a client can infer when it receives this response. If we want to change this resource, we can make a PUT request. If we want to delete the resource we can make a DELETE request.&lt;/p&gt;
+
+&lt;p&gt;But, there is a lot we don&amp;#39;t know as well. If I attempt a PUT or DELETE request, how do I know if the server supports those operations on this resource? What if I want to access information about this person&amp;#39;s company? What about other related information, such as the blog posts he&amp;#39;s written? This person is on an island isolated from the world. In order to access additional information, our users would have to consult the documentation and hardcode the relationships into their app. We could create an API client for our users to define those relationships, but then we have to maintain that client and get all of our users to update the version of the client they are using any time we make a change.&lt;/p&gt;
+
+&lt;h3&gt;Level 3&lt;/h3&gt;
+
+&lt;p&gt;Now let&amp;#39;s look at an example that uses hypermedia. To do this, we need a hypermedia format like HTML, except compatible with JSON. For this example, I&amp;#39;ve made up a hypermedia format so I could keep things as simple as possible. For a real API, you would want to use an established hypermedia format&lt;sup id=&quot;fnref1&quot;&gt;&lt;a href=&quot;#fn1&quot; rel=&quot;footnote&quot;&gt;1&lt;/a&gt;&lt;/sup&gt; with a formal specification. This made up hypermedia format needs a content type, so let&amp;#39;s call it &lt;code&gt;application/not-a-real-hypermedia-format+json&lt;/code&gt;. Even though it is compatible with JSON, it needs a distinct content type so the client knows to interpret certain elements as hypermedia controls. Otherwise the browser doesn&amp;#39;t know the difference between a hypermedia control and arbitrary data.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-http&quot; data-lang=&quot;http&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;HTTP&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1.1&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;200&lt;/span&gt; &lt;span class=&quot;ne&quot;&gt;OK&lt;/span&gt;
+&lt;span class=&quot;na&quot;&gt;Content-Type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;l&quot;&gt;application/not-a-real-hypermedia-format+json&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;$type&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;http://schema.org/Person&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;$data&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;quot;givenName&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;Joe&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;quot;familyName&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;Shmo&amp;quot;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;$links&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;self&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/person/1234&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;http://schema.org/worksFor&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/company/5678&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;http://schema.org/email&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;mailto:jshmo@example.com&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;http://schema.org/knows&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/person/1234/knows&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;},&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;http://schema.org/Blog&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/person/1234/blogs&amp;quot;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;],&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;quot;$forms&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;quot;rel&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;http://schema.org/knows&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;&amp;quot;href&amp;quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;/person/1234/knows&amp;quot;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The first thing you might notice is that this is a lot more complicated than the Level 2 example. That&amp;#39;s true, but it also expresses much more. We still know all the things we knew from the previous example, but now we also know about related resources. This resource is no longer an island. The &lt;code&gt;$links&lt;/code&gt; and &lt;code&gt;$forms&lt;/code&gt; provide a bridge connecting it to other resources. In this made up format, a generic client should expect &lt;code&gt;$links&lt;/code&gt; to be followed with &lt;code&gt;GET&lt;/code&gt; and &lt;code&gt;$forms&lt;/code&gt; to be followed with &lt;code&gt;POST&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;We are using &lt;a href=&quot;http://schema.org&quot;&gt;Schema.org&lt;/a&gt; to give meaning to things in a universal way. The &lt;code&gt;$type&lt;/code&gt; property lets us know that this resource is describing a &lt;code&gt;http://schema.org/Person&lt;/code&gt;. If we have a generic client that understands this definition of a Person, it can automatically trigger handling such as generating a UI to display the person. It can also do things like generate a &lt;code&gt;http://schema.org/Person&lt;/code&gt; form for the &lt;code&gt;http://schema.org/knows&lt;/code&gt; link to add a person to Joe&amp;#39;s contacts. The generic client knows it should generate a &lt;code&gt;http://schema.org/Person&lt;/code&gt; form because the definition of the &lt;code&gt;http://schema.org/knows&lt;/code&gt; relation tells us that it&amp;#39;s expected to point to a &lt;code&gt;http://schema.org/Person&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Even though there is a lot going on here, there should not be a burden on someone using our API because they should be using a generic client that understands how to parse the hypermedia and makes it easy to interact with.&lt;/p&gt;
+
+&lt;h2&gt;What&amp;#39;s Next&lt;/h2&gt;
+
+&lt;p&gt;In an attempt to simplify explanations, I made up a fake hypermedia format. In the next post in the series, we&amp;#39;ll look at some real hypermedia formats and introduce a classification system that we&amp;#39;ll use to discuss the properties of each format.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Check out &lt;a href=&quot;/blog/jason-desrosiers/2018/05/30/the-hypermedia-maturity-model.html&quot;&gt;Part 3: The Hypermedia Maturity Model&lt;/a&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;div class=&quot;footnotes&quot;&gt;
+&lt;hr&gt;
+&lt;ol&gt;
+
+&lt;li id=&quot;fn1&quot;&gt;
+&lt;p&gt;Some good choices for hypermedia formats are: &lt;a href=&quot;http://json-schema.org/latest/json-schema-hypermedia.html&quot;&gt;JSON Hyper-Schema&lt;/a&gt;, &lt;a href=&quot;https://www.markus-lanthaler.com/hydra/&quot;&gt;Hydra&lt;/a&gt;, &lt;a href=&quot;http://stateless.co/hal_specification.html&quot;&gt;HAL&lt;/a&gt;, and &lt;a href=&quot;https://github.com/kevinswiber/siren&quot;&gt;Siren&lt;/a&gt;&amp;nbsp;&lt;a href=&quot;#fnref1&quot; rev=&quot;footnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+
+&lt;/ol&gt;
+&lt;/div&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>Duration vs. Concurrency in AWS Lambda</title>
+      <link href="https://8thlight.com/blog/colin-jones/2018/04/09/duration-vs-concurrency-in-aws-lambda.html"/>
+      <updated>2018-04-09T00:00:00-05:00</updated>
+      <id>https://8thlight.com/blog/colin-jones/2018/04/09/duration-vs-concurrency-in-aws-lambda.html</id>
+
+      
+        <category term="AWS" />
+      
+        <category term="Architecture" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/colin-jones-0d3cdfb7fca0ac0384c96e102382788c737d7c4ffc647a92b6ebc43d7abc1987.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Colin Jones</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;&lt;em&gt;
+[Updated 2018-04-16] I was corrected on Twitter about how Event (async) invocation throttling behaves, and have updated this post accordingly in several places marked like this one.
+Thanks to &lt;a href=&quot;https://twitter.com/timallenwagner&quot;&gt;Tim Wagner&lt;/a&gt; for setting me straight!
+&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;I&amp;#39;ve been helping out on a project recently where we&amp;#39;re doing a number of integrations with third-party services.
+The integration platform is built on &lt;a href=&quot;https://aws.amazon.com/lambda/faqs/&quot;&gt;AWS Lambda&lt;/a&gt; and the &lt;a href=&quot;https://serverless.com/&quot;&gt;Serverless framework&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Aside from the data hygiene questions that you might expect in an integration project like this, one of the first things we&amp;#39;ve run into is a fundamental constraint in productionizing Lambda-based systems.
+As of today, AWS Lambda has the following limits (&lt;a href=&quot;https://docs.aws.amazon.com/lambda/latest/dg/limits.html&quot;&gt;among others&lt;/a&gt;):&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;max of 1000 concurrent executions per region (a soft limit that can be increased), and&lt;/li&gt;
+&lt;li&gt;max duration of 5 minutes for a single execution&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Imagine, then, that you have the following Lambda in Python:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-python&quot; data-lang=&quot;python&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;start&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;event&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;context&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;employees&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;_fetch_all_employees&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;event&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;&amp;#39;organization&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;employee&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;employees&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;_invoke_next_lambda&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;employee&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;So this top-level Lambda fetches employee data and acts as a sort of a &lt;a href=&quot;http://www.enterpriseintegrationpatterns.com/patterns/messaging/Sequencer.html&quot;&gt;Splitter&lt;/a&gt; in order to process each employee in the next step.
+This means that for every incoming message to this Lambda function, many Lambda functions will be invoked.
+When algorithms have this kind of behavior, we say that they take &amp;quot;polynomial&amp;quot; time to complete.
+The &amp;quot;polynomial&amp;quot; here is &lt;code&gt;O(N) = (N * M)&lt;/code&gt; where N is the number of inputs, and M is the number of steps.&lt;/p&gt;
+
+&lt;p&gt;Now let&amp;#39;s consider the following options for invoking these Lambda functions:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://docs.aws.amazon.com/lambda/latest/dg/API_Invoke.html&quot;&gt;Invoke the next Lambda&lt;/a&gt; using an &lt;code&gt;InvocationType&lt;/code&gt; of &lt;code&gt;RequestResponse&lt;/code&gt; (the default, which is synchronous).&lt;/li&gt;
+&lt;li&gt;Invoke the next Lambda using an &lt;code&gt;InvocationType&lt;/code&gt; of &lt;code&gt;Event&lt;/code&gt; (which is &lt;em&gt;asynchronous&lt;/em&gt;).&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Let&amp;#39;s take it for granted that we don&amp;#39;t want to use the remaining &lt;code&gt;InvocationType&lt;/code&gt; (it&amp;#39;s called &lt;code&gt;DryRun&lt;/code&gt;—you can probably guess why)!&lt;/p&gt;
+
+&lt;p&gt;Both of these options have costs and benefits.&lt;/p&gt;
+
+&lt;p&gt;By using the synchronous (&lt;code&gt;RequestResponse&lt;/code&gt;) invocation, we could ensure in-order processing and avoid the risk of hitting the concurrent executions limit.
+But we would then risk exceeding the execution duration limit, due to the executions taking polynomial time.&lt;/p&gt;
+
+&lt;figure class=&quot;center&quot;&gt;
+&lt;img src=&quot;/blog/assets/posts/2018-04-09-duration-vs-concurrency-in-aws-lambda/migrate-employees-request-response-e4afa023123e5a20ff188061da314f3585592a187f4f923b34b3d7c41962f1c1.png&quot; class=remove-border width=&quot;665&quot; height=&quot;157&quot; alt=&quot;posts/2018-04-09-duration-vs-concurrency-in-aws-lambda/migrate-employees-request-response.png&quot;&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;Similar deal if we just decided to &lt;a href=&quot;https://refactoring.com/catalog/inlineMethod.html&quot;&gt;inline&lt;/a&gt; that Lambda&amp;#39;s work into the top-level Lambda.&lt;/p&gt;
+
+&lt;figure class=&quot;center&quot;&gt;
+&lt;img src=&quot;/blog/assets/posts/2018-04-09-duration-vs-concurrency-in-aws-lambda/migrate-employees-monolithic-cf35a28e560e96d5ad2a940185fd5e3478261305ecac0bc19b29f9e0390b53cb.png&quot; class=remove-border width=&quot;152&quot; height=&quot;123&quot; alt=&quot;posts/2018-04-09-duration-vs-concurrency-in-aws-lambda/migrate-employees-monolithic.png&quot;&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;With the asynchronous (&lt;code&gt;Event&lt;/code&gt;) invocation, on the other hand, we can avoid the risk of hitting the execution duration limit.
+But with this option, we&amp;#39;d run the risk of having some executions throttled due to the concurrent executions limit.
+Even if we requested AWS to bump the concurrency limit up, there would still be &lt;em&gt;some&lt;/em&gt; limit and we&amp;#39;d need to manage that concurrency somehow.
+Incidentally, even if there was no concurrency limit directly in AWS, it&amp;#39;s likely that whatever work we&amp;#39;re doing (e.g. connecting to database or a third-party API) will have inherent concurrency limits as well.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;
+[Updated 2018-04-16] Throttling isn&amp;#39;t such a big deal in an isolated case like the one I&amp;#39;ve described, since &lt;a href=&quot;https://docs.aws.amazon.com/lambda/latest/dg/concurrent-executions.html&quot;&gt;Lambda enqueues Event invocations and will retry for six hours&lt;/a&gt;.
+However, since the concurrency limit is account-wide, retries around these asynchronous invocations can cause unexpected throttling failures in unrelated synchronous invocations.
+Function-level concurrency limits are a way forward, which I&amp;#39;ll describe below.
+&lt;/em&gt;&lt;/p&gt;
+
+&lt;figure class=&quot;center&quot;&gt;
+&lt;img src=&quot;/blog/assets/posts/2018-04-09-duration-vs-concurrency-in-aws-lambda/migrate-employees-event-89f7b15b830ae8fd99f52e9e1c336975a13ed8bd43e92434a0758cf302c4ff49.png&quot; class=remove-border width=&quot;431&quot; height=&quot;353&quot; alt=&quot;posts/2018-04-09-duration-vs-concurrency-in-aws-lambda/migrate-employees-event.png&quot;&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;If there&amp;#39;s not much work to be done (e.g. in a development / testing environment without much data), things might work just fine with either of these options.
+And at the edges of the limits, we could use manual retries, the &lt;a href=&quot;https://docs.aws.amazon.com/lambda/latest/dg/retries-on-errors.html&quot;&gt;Lambda retry policy&lt;/a&gt;, or &lt;a href=&quot;https://docs.aws.amazon.com/lambda/latest/dg/dlq.html&quot;&gt;Dead Letter Queues&lt;/a&gt; as safety nets that allow the right work to get done.&lt;/p&gt;
+
+&lt;p&gt;But as soon as we start to introduce more realistic data into the system, we&amp;#39;ll find that retries aren&amp;#39;t a complete solution.
+If it&amp;#39;s possible, I&amp;#39;d rather not rely on retries for the &amp;quot;happy path&amp;quot;, when we can already foresee the problems.
+Systems fail often enough for reasons we &lt;em&gt;can&amp;#39;t&lt;/em&gt; foresee, so let&amp;#39;s save retries and Dead Letter Queues for the more &lt;em&gt;unexpected&lt;/em&gt; issues.&lt;/p&gt;
+
+&lt;h2&gt;Working within the Constraints&lt;/h2&gt;
+
+&lt;p&gt;So where do we go when we&amp;#39;re stuck between the time budget on the one hand, and the concurrency budget on the other?&lt;/p&gt;
+
+&lt;p&gt;One approach is to process work in batches, replacing the &lt;code&gt;MigrateOneEmployee&lt;/code&gt; Lambda with something like a &lt;code&gt;MigrateEmployeeBatch&lt;/code&gt; which might process 10 records at a time, and invoking Lambdas in the asynchronous &lt;code&gt;Event&lt;/code&gt; style.
+From an algorithmic perspective, this is only reducing the concurrency by a constant factor—large numbers of employees could face the same issue.
+But in practice, a 10x reduction in concurrent executions may be plenty, particularly if the number of employees has a known upper bound!&lt;/p&gt;
+
+&lt;p&gt;An alternative approach that&amp;#39;s been working well for us has been to decouple the Lambdas with another mechanism: a queue.&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;We can solve any problem by introducing an extra level of indirection. &lt;sup&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Fundamental_theorem_of_software_engineering&quot;&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Inserting a queue between these two processes avoids both of the above constraints.
+First, like the asynchronous Lambda invocation, it avoids blocking the top-level Lambda while waiting for the child Lambda to complete.
+And secondly, like the &lt;em&gt;synchronous&lt;/em&gt; Lambda invocation, it allows us to limit the number of concurrent Lambdas associated with this process.
+Using a queue here might seem like an obvious choice to folks who have been around awhile, but until you&amp;#39;ve seen these kinds of constraints, queues might seem like an unnecessary bit of indirection.&lt;/p&gt;
+
+&lt;p&gt;But what does this look like in practice?
+There are a bunch of options for queue-like processing in AWS: &lt;a href=&quot;https://aws.amazon.com/sqs/faqs/&quot;&gt;SQS&lt;/a&gt;, &lt;a href=&quot;https://aws.amazon.com/kinesis/data-streams/faqs/&quot;&gt;Kinesis Data Streams&lt;/a&gt;, and &lt;a href=&quot;https://aws.amazon.com/dynamodb/faqs/&quot;&gt;DynamoDB Streams&lt;/a&gt; are all reasonable options to consider, in addition to spinning up plain old &lt;a href=&quot;https://aws.amazon.com/ec2/faqs/&quot;&gt;EC2&lt;/a&gt; instances with any messaging service we want (e.g. &lt;a href=&quot;https://www.rabbitmq.com/&quot;&gt;RabbitMQ&lt;/a&gt;, &lt;a href=&quot;http://activemq.apache.org/&quot;&gt;ActiveMQ&lt;/a&gt;, etc.)
+For our first iteration, we&amp;#39;ve settled on SQS, for a couple of reasons:
+Compared to the EC2 instance approach, SQS handles scalability for us.
+And compared to Kinesis Data Streams and DynamoDB Streams, SQS has the queue own the state of whether various events/messages have been processed yet.
+This makes scaling up more queue consumers (a la the &lt;a href=&quot;http://www.enterpriseintegrationpatterns.com/patterns/messaging/CompetingConsumers.html&quot;&gt;Competing Consumers&lt;/a&gt; pattern) straightforward, along with avoiding consumer coordination.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;
+[Updated 2018-04-16] I&amp;#39;ve recently learned that by introducing &lt;a href=&quot;https://docs.aws.amazon.com/lambda/latest/dg/concurrent-executions.html&quot;&gt;function-level concurrency limits&lt;/a&gt; on the &lt;code&gt;MigrateOneEmployee&lt;/code&gt; Lambda, and using the &lt;code&gt;Event&lt;/code&gt; invocation type.
+This gets us the benefits of a queue, without having to manage additional services or infrastructure.
+SQS does give us a bit more observability, more time to process the work (4 days by default, up to 14 - vs. 6 hours in the hidden Lambda queue), and more potential for adding additional workers (which could live outside of Lambda&amp;#39;s concurrency limits) to process load more quickly if the queue gets deep.
+But if we had known about this combination of function-level concurrency limits and Event throttling behavior, we likely would have chosen this route instead for our use case.
+&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;So an approach like this one solves for both of the primary Lambda constraints (execution duration and concurrency level):&lt;/p&gt;
+
+&lt;figure class=&quot;center&quot;&gt;
+&lt;img src=&quot;/blog/assets/posts/2018-04-09-duration-vs-concurrency-in-aws-lambda/migrate-employees-sqs-poller-6cbd22cc6310cae421a132d56b5b283b28b0d446ceb9c03703d30557fd14fab1.png&quot; class=remove-border width=&quot;726&quot; height=&quot;438&quot; alt=&quot;posts/2018-04-09-duration-vs-concurrency-in-aws-lambda/migrate-employees-sqs-poller.png&quot;&gt;
+&lt;/figure&gt;
+
+&lt;p&gt;In the example design above, we&amp;#39;re firing a Lambda every M minutes (minimum of one minute) to grab work from the queue, using &lt;a href=&quot;https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/WhatIsCloudWatchEvents.html&quot;&gt;CloudWatch Events&lt;/a&gt;.
+Depending on the pattern of work and application needs, this could be wasteful or useful.
+If it&amp;#39;s &lt;em&gt;rare&lt;/em&gt; for there to be work in the queue, it might be more cost-efficient to fire up this polling Lambda whenever the number of available messages in the queue (a &lt;a href=&quot;https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/sqs-metricscollected.html&quot;&gt;CloudWatch SQS metric&lt;/a&gt; called &lt;code&gt;ApproximateNumberOfMessagesVisible&lt;/code&gt;) is above zero.
+However, that change comes with a bit of extra processing latency: SQS metrics like &lt;code&gt;ApproximateNumberOfMessagesVisible&lt;/code&gt; only gets sent every five minutes, which means messages could sit in the queue at least four minutes longer under this approach.
+So if latency is important, an every-minute poller works a bit better.&lt;/p&gt;
+
+&lt;p&gt;Besides that, we&amp;#39;re doing something a little unsatisfying in that we introduce a new Lambda purely for operational needs.
+More critically, we are left with a conundrum in that to safely delete messages from the queue, we&amp;#39;d like to ensure the work is completed.
+And the work doesn&amp;#39;t get completed until &lt;code&gt;MigrateOneEmployee&lt;/code&gt; has done its job.
+So if we want to ensure all messages are eventually processed (one of the benefits of using SQS in the first place), we&amp;#39;re forced to either spread SQS knowledge across both the SQSPoller (which picks up a message) and the MigrateOneEmployee Lambda (which removes it), use &lt;code&gt;RequestResponse&lt;/code&gt; Lambda invocation, or combine these two Lambdas into one.&lt;/p&gt;
+
+&lt;p&gt;There are plenty of other caveats and gotchas here, as with many asynchronous systems, including ensuring that the &lt;a href=&quot;https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html&quot;&gt;SQS visibility timeout&lt;/a&gt; is less than the total processing duration.&lt;/p&gt;
+
+&lt;p&gt;It would be nice if SQS could instead notify us when there are messages for us in the queue, and automatically farm out work to Lambdas, without this extra CloudWatch / SQS-polling infrastructure.
+The good news is that on April 4, 2018, AWS announced upcoming support for SQS events as direct Lambda triggers, rather than having to rely on CloudWatch events.
+I&amp;#39;ll be excited to see that functionality roll out and hopefully eliminate our need for this extra Lambda, along with solving the reliability issue described above.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;
+[Updated 2018-04-16] The most &amp;quot;official&amp;quot; link I&amp;#39;ve seen for the AWS Lambda - SQS integration announcement: &lt;a href=&quot;https://twitter.com/timallenwagner/status/985269102129197056&quot;&gt;https://twitter.com/timallenwagner/status/985269102129197056&lt;/a&gt;
+&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;There are plenty of alternatives to the approach here.
+For example, in heavy production usage, many folks use EC2 instances as their queue consumers, with Auto Scaling based on the &lt;code&gt;ApproximateNumberOfMessagesVisible&lt;/code&gt; CloudWatch metric.
+This can work well and comes with all the additional configurability and runtime options of EC2.
+It makes the most sense for scenarios where EC2 instances are going to be doing the work, unlike our poller which simply farms work out to Lambda functions.&lt;/p&gt;
+
+&lt;p&gt;We also didn&amp;#39;t work on optimizing the &lt;code&gt;MigrateOneEmployee&lt;/code&gt; Lambda executions themselves.
+Reducing the runtime there would have immediate benefits.
+In our case, these are mostly IO-bound functions, reliant on the performance of potentially-slow external APIs to do their work, so batching that IO up could help.
+If they were CPU or memory-bound, we might increase the memory allocated to the Lambda (which would also increase the available CPU proportionally).&lt;/p&gt;
+
+&lt;p&gt;So far, the approach outlined above works well for this team, and we are excited to see how it develops!
+These execution duration and concurrency limits are by no means the only interesting constraints that a Serverless architecture presents.
+For example, Lambda &lt;a href=&quot;https://docs.aws.amazon.com/lambda/latest/dg/limits.html&quot;&gt;currently limits&lt;/a&gt; the data passed in &lt;code&gt;Event&lt;/code&gt; invocations to 128 KB, and &lt;code&gt;RequestResponse&lt;/code&gt; invocations to 6 MB.
+SQS, in turns, &lt;a href=&quot;https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-limits.html&quot;&gt;limits&lt;/a&gt; a message&amp;#39;s size to 256 KB.
+That&amp;#39;s a story for another day, but if you&amp;#39;re intrigued and want to dig deeper, have a look at the &lt;a href=&quot;http://www.enterpriseintegrationpatterns.com/patterns/messaging/StoreInLibrary.html&quot;&gt;Claim Check&lt;/a&gt; pattern from &lt;a href=&quot;http://www.enterpriseintegrationpatterns.com/&quot;&gt;Enterprise Integration Patterns&lt;/a&gt;!&lt;/p&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>Basic Web App Architecture 101</title>
+      <link href="https://8thlight.com/blog/sarah-sunday/2018/04/04/basic-webapp-architecture-101.html"/>
+      <updated>2018-04-04T00:00:00-05:00</updated>
+      <id>https://8thlight.com/blog/sarah-sunday/2018/04/04/basic-webapp-architecture-101.html</id>
+
+      
+        <category term="Architecture" />
+      
+        <category term="Web App" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/sarah-sunday-2ba67590d742b1c27626b5ec10f430cfaa187c63dcdcc1fe8541ec24bc57844b.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Sarah Sunday</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;Okay, so you want to build a web app.&lt;/p&gt;
+
+&lt;p&gt;Let&amp;#39;s use a very basic web application for instance.&lt;/p&gt;
+
+&lt;p&gt;The user story is this:&lt;/p&gt;
+
+&lt;ol&gt;
+&lt;li&gt;The user logs in.&lt;/li&gt;
+&lt;li&gt;The user goes to another page, which has a form.&lt;/li&gt;
+&lt;li&gt;When the user clicks submit, data is saved and they can view it later.&lt;/li&gt;
+&lt;li&gt;It will also send an email five minutes later that does something with that data.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;That sounds like super simple app? Easy! You can totally build that no problem.&lt;/p&gt;
+
+&lt;p&gt;Hold on. Not so fast there.&lt;/p&gt;
+
+&lt;p&gt;Let&amp;#39;s break it down to see what&amp;#39;s actually going on, and then you decide whether it’s truly easy.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;The user logs in.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;This clues us in that there is some form of authentication. There are many forms of authentication, not all created equal or easily created.&lt;/p&gt;
+
+&lt;p&gt;Such as:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;You could use &lt;a href=&quot;https://en.wikipedia.org/wiki/OAuth&quot;&gt;OAuth&lt;/a&gt;, as in, not actually do the authentication yourself. Leave it to Google or whomever to do it for you, and instead store an encrypted oauth token.&lt;/li&gt;
+&lt;li&gt;If you’re using Rails, you could use &lt;a href=&quot;https://github.com/plataformatec/devise&quot;&gt;Devise&lt;/a&gt; and then it’s not a matter of implementing but rather integrating.&lt;/li&gt;
+&lt;li&gt;Again, if you&amp;#39;re using Rails/ActiveRecord, you could leverage &lt;a href=&quot;http://api.rubyonrails.org/classes/ActiveModel/SecurePassword/ClassMethods.html#method-i-has_secure_password&quot;&gt;&lt;code&gt;has_secure_password&lt;/code&gt;&lt;/a&gt; to create your own user system while having a streamlined password approach that&amp;#39;s been fine-tuned &lt;em&gt;for&lt;/em&gt; you.&lt;/li&gt;
+&lt;li&gt;Creating your own authentication system. This is not recommended.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;So whatever your choice, your user can log in...granted there is a page, route, and form for them to do that. To even get there, you need one decent skeleton already in place.&lt;/p&gt;
+
+&lt;p&gt;Which brings us to:&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;The (actual) first step.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Choosing a framework or lack thereof. You’re going to need to write this web app with &lt;em&gt;something&lt;/em&gt;. Whether that’s &lt;a href=&quot;http://rubyonrails.org/&quot;&gt;Ruby on Rails&lt;/a&gt;, &lt;a href=&quot;http://www.phoenixframework.org/&quot;&gt;Elixir with Phoenix&lt;/a&gt;, &lt;a href=&quot;https://laravel.com/&quot;&gt;PHP with Laravel&lt;/a&gt;, or something homegrown.&lt;/p&gt;
+
+&lt;p&gt;All choices have their pros and cons. Ruby on Rails is battle-tested and has an extremely large community. Elixir with Phoenix is the new cool kid on the block that’s functional, but the newness means that support for everything isn’t there (yet). PHP is the old guard in the web development world, but still very much alive through Wordpress and Laravel.&lt;/p&gt;
+
+&lt;p&gt;And then there’s growing your own solution. Which sounds cool and powerful, but realize that there are dozens of things you didn’t realize you had to do because a framework has been doing it for you all along. Things like &lt;a href=&quot;https://www.keycdn.com/support/what-is-cache-busting/&quot;&gt;cache busting&lt;/a&gt;, providing an integrated ORM for easy data access (like Active Record or Eloquent), handling background jobs, and, the most critical part, figuring out how to safely deploy it.&lt;/p&gt;
+
+&lt;p&gt;Before I kill your homegrown party completely, let’s go back to this hypothetical web app.&lt;/p&gt;
+
+&lt;p&gt;Let’s say you can log in and navigate to another page with a form.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;When the user clicks submit, data is saved and they can view it later.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Data. Saved. So ergo, a database exists… though what &lt;em&gt;kind&lt;/em&gt; of database?&lt;/p&gt;
+
+&lt;p&gt;Let’s be honest here. We don’t need a fancy NoSQL database for this. A simple, powerful, relational database will suffice.&lt;/p&gt;
+
+&lt;p&gt;Which one, though?&lt;/p&gt;
+
+&lt;p&gt;If you’re not in the Windows Sphere, you basically have two options:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://www.postgresql.org/&quot;&gt;PostgreSQL&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href=&quot;https://www.mysql.com/&quot;&gt;MySQL&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Both are powerful in their own right. Postgres has more bells and whistles that make it very attractive—such as a JSON data type, and having a boolean type (unlike MySQL which has only tinyint.) MySQL is more popular and has more clattering around it because of its age.&lt;/p&gt;
+
+&lt;p&gt;Whatever the choice, there you go, you have a database. And you’ll have to integrate it with your application using some programmatic interface, be it &lt;a href=&quot;http://guides.rubyonrails.org/active_record_basics.html&quot;&gt;Active Record&lt;/a&gt;, &lt;a href=&quot;https://laravel.com/docs/5.4/eloquent&quot;&gt;Eloquent&lt;/a&gt;, or whatever.&lt;/p&gt;
+
+&lt;p&gt;All that in place, congrats! You saved data into a database!&lt;/p&gt;
+
+&lt;p&gt;The fun doesn’t stop there.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;It will also send an email five minutes later that does something with that data.&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Emailing. Scheduling. Obviously, we don’t want the user to click something and have to wait five minutes for that email to send. So that click needs to schedule and set something to happen in the background.&lt;/p&gt;
+
+&lt;p&gt;The most robust way of doing this is have the web app send a message to a queue and have a worker read the message from the queue and do what needs to be done. In more specific terms, you configure Rails through &lt;a href=&quot;https://github.com/tawan/active-elastic-job&quot;&gt;Active Elastic Job&lt;/a&gt; to send a serialized message to an &lt;a href=&quot;https://aws.amazon.com/sqs/&quot;&gt;AWS SQS&lt;/a&gt; Queue, and a worker takes the message from the queue and processes at whatever time you scheduled.&lt;/p&gt;
+
+&lt;p&gt;Having a queue and a worker provides scalability and doesn’t block the web app or user from doing something else while it waits to do something in the background.&lt;/p&gt;
+
+&lt;p&gt;As for the emailing part of it, your options are determined by context, but some choices are:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://www.mailgun.com/&quot;&gt;Mailgun&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;Using an email account from Outlook, Gmail, etc.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;This is with a complimentary service/tactic for not sending emails out in development. Like logging instead of sending, or using something like &lt;a href=&quot;https://mailtrap.io/&quot;&gt;Mailtrap.io&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;With all that configured, magically no doubt, your web app is done! Either you learned how amazing Rails/Phoenix/Laravel is or how rewarding/painful it is to build your own system. While also learning that a lot goes into building a web app. Maybe more than you thought at first.&lt;/p&gt;
+
+&lt;p&gt;But it’s over. Right?&lt;/p&gt;
+
+&lt;p&gt;Of course not!&lt;/p&gt;
+
+&lt;p&gt;We didn’t cover testing &lt;em&gt;or&lt;/em&gt; deploying!&lt;/p&gt;
+
+&lt;p&gt;All this time and effort choosing technologies and setting up the basic flow of your web app, and it is neither properly maintainable nor an actual web app yet. If you&amp;#39;re planning building a web app for whatever reason, do not underestimate the complexity. Overestimate it greatly if you have to as you&amp;#39;ll probably be right on the mark. You may think it&amp;#39;s simple, list out a few steps and it seems simple, but there are countless other steps and choices within them. There&amp;#39;s &lt;em&gt;always&lt;/em&gt; something more to do.&lt;/p&gt;
+
+&lt;p&gt;As I tend to say now, everything is a work in progress. But this eternal WIP progresses with each phase of development so it&amp;#39;s not &lt;em&gt;completely&lt;/em&gt; hopeless. A mostly finished product looms on the horizon--you just have to push through to get there.&lt;/p&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>Talking to Yourself: Daily Standups in a Team of One</title>
+      <link href="https://8thlight.com/blog/ian-carroll/2018/03/27/talking-to-yourself-daily-standups-in-a-team-of-one.html"/>
+      <updated>2018-03-27T00:00:00-05:00</updated>
+      <id>https://8thlight.com/blog/ian-carroll/2018/03/27/talking-to-yourself-daily-standups-in-a-team-of-one.html</id>
+
+      
+        <category term="Community" />
+      
+        <category term="Apprenticeship" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/ian-carroll-34e26e10476e013ba93aea679e8a3fb798f6811071994cfb66afe5f499912a52.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Ian Carroll</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;“Talking to yourself is a sign of insanity, you know.”&lt;br&gt;
+The last time someone said that to me was sometime in the 20th Century.&lt;br&gt;
+I was in school, in Maryland, and I happened to be reciting my lines for a production of &lt;a href=&quot;https://en.wikipedia.org/wiki/The_Importance_of_Being_Earnest&quot;&gt;The Importance of Being Earnest&lt;/a&gt;. Is that relevant to crafting software? As it turns out, yes. But let me first fill you in on my background as an engineer.&lt;/p&gt;
+
+&lt;p&gt;&lt;br&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;“If I am occasionally a little over-dressed, I make up for it by being always immensely over-educated.” - Algernon, The Importance of Being Earnest&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;I am a Software Crafter. Yet I have no formal education in computer science. I taught myself software by creating a one-person process to drive my learning using Agile and Scrum.&lt;/p&gt;
+
+&lt;p&gt;I do have a degree, but my degree is in theatre. I even studied Shakespeare at the Royal Academy of Dramatic Art in London. It was awesome. That may seem unrelated, but because I spent so much time in both fields, I can see patterns common to theatre and software.&lt;/p&gt;
+
+&lt;p&gt;In the software world, development teams use processes to craft apps.&lt;br&gt;
+In the theatre world, production companies use processes to craft plays.&lt;br&gt;
+Software has a process called scrum.&lt;br&gt;
+Theatre has a process called rehearsal.&lt;/p&gt;
+
+&lt;p&gt;The thing about the rehearsal process is that its pattern remains essentially the same regardless of whether you are putting on  &lt;a href=&quot;https://en.wikipedia.org/wiki/Les_Mis%C3%A9rables_(musical)&quot;&gt;Les Miserables&lt;/a&gt; with a team of hundreds, or you’re putting on Samuel Beckett&amp;#39;s &lt;a href=&quot;https://en.wikipedia.org/wiki/Act_Without_Words_I&quot;&gt;Act Without Words&lt;/a&gt; by yourself. Scaling the process up, you specialize the roles more. Scaling down, you put more responsibility on a single person. Doing Act Without Words just means that you are all the roles. You are the whole cast, the director, the set designer, etc.&lt;/p&gt;
+
+&lt;p&gt;So naturally, when I learned about &lt;a href=&quot;https://www.scrum.org/resources/what-is-scrum&quot;&gt;scrum&lt;/a&gt;, I saw it as a specialized kind of rehearsal process. That meant I could scale it down to one. That one person (me) just had to do all the roles.&lt;/p&gt;
+
+&lt;p&gt;But some things in scrum seem to be designed with a team in mind. Daily standups, for example. The purpose of a team’s daily standup is to have a meeting so that everyone is on the same page, that blockers are identified and dealt with as early as possible, and so the meeting takes less than 15 minutes.&lt;/p&gt;
+
+&lt;p&gt;However, that’s not all a standup does. Standups have value even if you’re the only one standing up.&lt;/p&gt;
+
+&lt;p&gt;&lt;br&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;“Now produce your explanation and pray make it improbable.” - Algernon&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;In scaling down scrum to work for one, I did my best to keep every formality of a team-based scrum. During retrospectives I could cut stuff out if I needed, but standups never met the chopping block. Part of the reason was because my standups were not verbal. They were additions to &lt;a href=&quot;https://github.com/IanDCarroll/GoScrumYourself/blob/master/DailyScrum.md&quot;&gt;a markdown file on GitHub&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;br&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;“I never travel without my diary. One should always have something sensational to read in the train.” - Gwendolen&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;That GitHub diary became invaluable as a resource towards understanding what was working and what wasn’t in my process. I would start my retrospectives by reviewing the standups for the last sprint and look for patterns that could clue me in to what was going right and what could be holding me back.&lt;/p&gt;
+
+&lt;p&gt;&lt;br&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;“The truth is rarely pure and never simple.” - Algernon&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Another reason it didn’t get the axe was because it served as a ritual to get me into the mindset of software development. My day job was as a retail salesperson. No one I talked to was technically minded. To make matters worse, at home I was in a relationship that was becoming more emotionally draining and abusive day by day. The act of simply answering the questions allowed me to mentally switch gears, set aside my suffering, and work.
+1. What did you do yesterday to help accomplish the sprint goal?
+2. What will you do today to that end?
+3. Are there any blockers that might prevent you from accomplishing that goal?&lt;/p&gt;
+
+&lt;p&gt;&lt;br&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;“I think that whenever one has anything unpleasant to say, one should always be quite candid.” - Cecily&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Spelling out the blockers each day allowed me to know what could derail my efforts. If there was something in the moment I could do to remove the blocker, I would. Otherwise it got logged for me to review during the end-of-sprint retrospective. The significance of this can’t be overstated.&lt;/p&gt;
+
+&lt;p&gt;By being honest about blockers and writing them down, I was left with a record of what takes me away from my goals. For instance, I discovered that the way I prioritized chores was holding me back. That allowed me to find ways to be more efficient. Chores weren’t the only blocker, there were strings of emergencies that would come up to derail my flow. With this record, I could begin to predict when emergencies would occur, when my most productive days were, and guard those days against side-lining.&lt;/p&gt;
+
+&lt;p&gt;Without the record created from the standup, my efforts would produce fewer and fewer results until I simply ran out of steam. I would never be the wiser as to why, either. But it would have been the cumulative effect of a thousand unexamined tiny blockers. With standups, I could identify each and work to keep my path forward clear.&lt;/p&gt;
+
+&lt;p&gt;&lt;br&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;“I keep a diary in order to enter the wonderful secrets of my life. If I didn&amp;#39;t write them down, I should not probably forget all about them.” - Cecily&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Doing daily standups also had the pleasant side-effect in of allowing me to forget how much emotional pain I was in and focus on putting one line of code in front of the other. It provided a structure, a habit to focus my mind, which allowed me to succeed in inhospitable conditions. In that sense, I might even say the daily standup was the most important part of my personal scrum. Without it, I might have given up on learning software altogether.&lt;/p&gt;
+
+&lt;p&gt;&lt;br&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;“What seem to us a bitter trials are often blessings in disguise.” - Oscar Wilde&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;Ultimately, It turns out that talking to yourself can keep you sane—as long as you’re actively deciding what to tell yourself. And though scrum is most often used in larger teams, it can also be scaled down for your personal learning time whether you’re diving into deep learning algorithms or building  a tic-tac-toe app for 8th Light’s apprenticeship. For that reason I very much recommend you try it.&lt;/p&gt;
+
+&lt;p&gt;But when you start your personal scrum, or start fitting any agile process to any team’s circumstance, keep every practice, even if it seems silly. You may discover it has another value in your situation.&lt;/p&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>Turning Up The Good On REST APIs</title>
+      <link href="https://8thlight.com/blog/jason-desrosiers/2018/03/21/turning-up-the-good-on-rest-apis.html"/>
+      <updated>2018-03-21T00:00:00-05:00</updated>
+      <id>https://8thlight.com/blog/jason-desrosiers/2018/03/21/turning-up-the-good-on-rest-apis.html</id>
+
+      
+        <category term="Hypermedia" />
+      
+        <category term="Architecture" />
+      
+        <category term="Tools" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/jason-desrosiers-969ee35cdc9261d69af6ec2834e9303df9993ab593ce5317dbe7ea4cb365bd8d.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Jason Desrosiers</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;&lt;em&gt;This is part one in a series about hypermedia and REST. If you like this and want to read more, check out &lt;a href=&quot;/blog/tags/hypermedia.html&quot;&gt;the full series&lt;/a&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;When Kent Beck describes how he developed Extreme Programming, he talks not about fixing the things that don&amp;#39;t work, but rather turning the dial to 10&lt;sup id=&quot;fnref1&quot;&gt;&lt;a href=&quot;#fn1&quot; rel=&quot;footnote&quot;&gt;1&lt;/a&gt;&lt;/sup&gt; on things do work. For example, we know that code reviews can help find bugs and improve code. We also know that the more often we do code reviews the better they work. If we turn the frequency of code reviews up to the max, we have Pair Programming. There is someone reviewing your code in realtime as you code. Woody Zuil calls this concept, &amp;quot;turning up the good&amp;quot;&lt;sup id=&quot;fnref2&quot;&gt;&lt;a href=&quot;#fn2&quot; rel=&quot;footnote&quot;&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+
+&lt;h2&gt;REST the Good Parts&lt;/h2&gt;
+
+&lt;p&gt;So, what if we applied this concept of turning up the good to REST APIs? In order to answer this question, we need to identify the good parts we want to turn up.&lt;/p&gt;
+
+&lt;p&gt;One of the main benefits of using REST to build APIs is that we can use use existing web standards like URI and HTTP. We don&amp;#39;t have to reinvent a way to identify things (URI) or how to pass messages between the client and server (HTTP). When everyone follows these standards, we have a uniform interface that allows us to understand what an API does by looking at its URIs and the HTTP methods it supports. We don&amp;#39;t have to learn a new vocabulary every time we work with a new API.&lt;/p&gt;
+
+&lt;h2&gt;Reality Check&lt;/h2&gt;
+
+&lt;p&gt;That sounds great in theory, but in real life things get messy. Despite everyone working from the same standard, there are nearly as many interpretations of those standards and opinions on &amp;quot;best practices&amp;quot; as there are APIs. This throws a wrench into the promise of being able to understand what any API does at a glance. It also means that every API needs its own client that understands its particular flavor of HTTP.&lt;/p&gt;
+
+&lt;p&gt;The other problem with using HTTP as a uniform interface is that not everything fits in a neat little box. If your API needs to do something other than basic CRUD operations, you have to rely heavily on documentation to express what your API does.&lt;/p&gt;
+
+&lt;h2&gt;Uniform Interface&lt;/h2&gt;
+
+&lt;p&gt;Let&amp;#39;s put all that aside for now and come back to it later. In theory, a uniform interface for APIs is a good idea. So, let&amp;#39;s turn that idea up and see what effect it has on the problems that were identified. The big win for having a uniform interface is that it allows us to automate a lot of our interactions with APIs without having to know about the complicated inner workings.&lt;/p&gt;
+
+&lt;p&gt;There are many HTTP clients out there that do some of this automation. For example, in JavaScript, I can use the &lt;code&gt;fetch&lt;/code&gt; HTTP client to do something like this.&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-JavaScript&quot; data-lang=&quot;JavaScript&quot;&gt;&lt;span&gt;&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;fetch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;&amp;#39;http://example.com/foo&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;then&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&amp;gt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;ok&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// happy path&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// sad path&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;I didn&amp;#39;t need to know how to construct an HTTP request or how to parse the response. I didn&amp;#39;t even need to know that a &lt;code&gt;200 OK&lt;/code&gt; status means the request was successful. The HTTP client abstracts those details. Something like this can potentially do all kinds of useful things for us automatically, such as caching or retrying failed requests. That&amp;#39;s a pretty big win that we take for granted.&lt;/p&gt;
+
+&lt;h2&gt;Turn up the Good&lt;/h2&gt;
+
+&lt;p&gt;That&amp;#39;s the norm today, but what else can we automate to make our work easier? Since REST is an architectural style that describes the web, we can look to the web for inspiration. With the web, we have web browsers instead of HTTP clients. Billions of people use web browsers every day without having to know anything about URI, HTTP, or HTML. At the same time, the web&amp;#39;s uniform interface is flexible enough to support almost any application we can think of.&lt;/p&gt;
+
+&lt;p&gt;One of the things the browser automates is parsing HTML and creating a graphical display including content, links, and forms. HTML is part of the uniform interface of the web, and processing it is something that can be automated. A REST API client doesn&amp;#39;t need to do anything with graphics, but it can benefit from links and forms just like the web does.&lt;/p&gt;
+
+&lt;p&gt;Links and forms are collectively known as hypermedia, and are a uniform interface for connecting graphs of related resources and defining workflows. We can use hypermedia with APIs to automate these things the same way a browser does. The missing piece is a mediatype like HTML that supports hypermedia, but is optimized for data transmission rather than graphical display. The most popular data format for REST APIs today is JSON, but because JSON doesn&amp;#39;t support hypermedia, we can&amp;#39;t make clients on the level of web browsers.&lt;/p&gt;
+
+&lt;p&gt;Many have taken a stab at defining a hypermedia type for data, but there is no clear winner. Some of the more popular choices are JSON Hyper-Schema&lt;sup id=&quot;fnref3&quot;&gt;&lt;a href=&quot;#fn3&quot; rel=&quot;footnote&quot;&gt;3&lt;/a&gt;&lt;/sup&gt;, Hydra&lt;sup id=&quot;fnref4&quot;&gt;&lt;a href=&quot;#fn4&quot; rel=&quot;footnote&quot;&gt;4&lt;/a&gt;&lt;/sup&gt;, HAL&lt;sup id=&quot;fnref5&quot;&gt;&lt;a href=&quot;#fn5&quot; rel=&quot;footnote&quot;&gt;5&lt;/a&gt;&lt;/sup&gt;, and Siren&lt;sup id=&quot;fnref6&quot;&gt;&lt;a href=&quot;#fn6&quot; rel=&quot;footnote&quot;&gt;6&lt;/a&gt;&lt;/sup&gt;. Despite all these options, it has not yet been a popular idea to automate the processing of these media types with REST API browsers. The big win with uniform interfaces is automation, so let&amp;#39;s turn up the good and start getting the benefit of hypermedia without burdening API consumers with having to learn the details of your chosen hypermedia media type.&lt;/p&gt;
+
+&lt;h2&gt;Where does this get us?&lt;/h2&gt;
+
+&lt;p&gt;The web is an example of a successful uniform interface capable of describing just about any application that is runnable on a generic client. By taking lessons from that uniform interface, we should be able to create an API Browser that you can use to interact with any API without needing to know anything about the complicated standards that make up the web.&lt;/p&gt;
+
+&lt;p&gt;The problem of the HTTP methods not being descriptive enough for every application goes away when a self-descriptive, hypermedia-enabled media type is part of your uniform interface. Not only that, but you can throw away most of your API documentation because the API is self-describing just like a web application.&lt;/p&gt;
+
+&lt;p&gt;The problem of different APIs having different interpretations of the standards goes away when developers are targeting API Browsers. If your API doesn&amp;#39;t follow the standards, then it won&amp;#39;t work with API Browsers. No one wants that. Working with a generic API Browser is not only preferred by API consumers, it&amp;#39;s preferred by API developers because they don&amp;#39;t want to have to write and maintain their own client.&lt;/p&gt;
+
+&lt;h2&gt;What&amp;#39;s next&lt;/h2&gt;
+
+&lt;p&gt;This is the first in a series of posts about hypermedia. I glossed over a lot of the details this time. In the following posts, I&amp;#39;ll get into more details about REST and hypermedia and how we can make this vision a reality. In the next post we will do a deep dive on hypermedia.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Check out &lt;a href=&quot;/blog/jason-desrosiers/2018/04/11/decoupling-the-client-and-server-with-hypermedia.html&quot;&gt;Part 2: Decoupling the Client and Server with Hypermedia&lt;/a&gt;.&lt;/em&gt;&lt;/p&gt;
+
+&lt;div class=&quot;footnotes&quot;&gt;
+&lt;hr&gt;
+&lt;ol&gt;
+
+&lt;li id=&quot;fn1&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.amazon.com/Extreme-Programming-Explained-Embrace-Change/dp/0321278658&quot;&gt;Extreme Programming Explained, by Kent Beck&lt;/a&gt;&amp;nbsp;&lt;a href=&quot;#fnref1&quot; rev=&quot;footnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+
+&lt;li id=&quot;fn2&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.agilealliance.org/wp-content/uploads/2015/12/ExperienceReport.2014.Zuill_.pdf&quot;&gt;&amp;quot;Turn up the good&amp;quot;, Woody Zuil&lt;/a&gt;&amp;nbsp;&lt;a href=&quot;#fnref2&quot; rev=&quot;footnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+
+&lt;li id=&quot;fn3&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;http://json-schema.org/latest/json-schema-hypermedia.html&quot;&gt;JSON Hyper-Schema&lt;/a&gt;&amp;nbsp;&lt;a href=&quot;#fnref3&quot; rev=&quot;footnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+
+&lt;li id=&quot;fn4&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;https://www.markus-lanthaler.com/hydra/&quot;&gt;Hydra&lt;/a&gt;&amp;nbsp;&lt;a href=&quot;#fnref4&quot; rev=&quot;footnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+
+&lt;li id=&quot;fn5&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;http://stateless.co/hal_specification.html&quot;&gt;HAL&lt;/a&gt;&amp;nbsp;&lt;a href=&quot;#fnref5&quot; rev=&quot;footnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+
+&lt;li id=&quot;fn6&quot;&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/kevinswiber/siren&quot;&gt;Siren&lt;/a&gt;&amp;nbsp;&lt;a href=&quot;#fnref6&quot; rev=&quot;footnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+
+&lt;/ol&gt;
+&lt;/div&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>Making a Static Website with Jekyll and S3</title>
+      <link href="https://8thlight.com/blog/sarah-sunday/2018/02/14/making-a-static-website-with-jekyll-and-s3.html"/>
+      <updated>2018-02-14T00:00:00-06:00</updated>
+      <id>https://8thlight.com/blog/sarah-sunday/2018/02/14/making-a-static-website-with-jekyll-and-s3.html</id>
+
+      
+        <category term="AWS" />
+      
+        <category term="Web Development" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/sarah-sunday-2ba67590d742b1c27626b5ec10f430cfaa187c63dcdcc1fe8541ec24bc57844b.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Sarah Sunday</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;If you need to make a marketing website for your business, aside from the branding and design aspect, your main concerns are probably:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;Will the site be fast and responsive for my potential clients/customers?&lt;/p&gt;
+
+&lt;p&gt;How much will the site cost to make and maintain?&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Site speed and reliability is huge for marketing. People need to be able to access your site from a variety of devices and internet speeds. You don&amp;#39;t want users to have to wait seconds for your page to respond. That&amp;#39;s lost business right there.&lt;/p&gt;
+
+&lt;p&gt;But you also don&amp;#39;t want to go bankrupt making the website. So you have to be cost conscious about building your marketing website and hosting it for potentially decades.&lt;/p&gt;
+
+&lt;p&gt;Rest assured, there&amp;#39;s a solution that will put all these worries to rest.&lt;/p&gt;
+
+&lt;p&gt;That solution leverages the &lt;a href=&quot;http://2ndwatch.com/blog/the-most-popular-aws-products-of-2016/&quot;&gt;most popular Amazon Web Services product&lt;/a&gt;: S3.&lt;/p&gt;
+
+&lt;p&gt;Aside from storing images or files for an application, S3 can also host static websites. Static websites are made up of HTML, CSS, and Javascript. Not only are they fast to load, they are one the easiest types of websites to put together.&lt;/p&gt;
+
+&lt;p&gt;It is even easier when using something like &lt;a href=&quot;https://jekyllrb.com/&quot;&gt;Jekyll&lt;/a&gt;. Jekyll gives you the flexibility to use Markdown, raw HTML, partials for, say, a header or footer, and use SASS for styling. Not only that, it&amp;#39;s very simple to set up.&lt;/p&gt;
+
+&lt;p&gt;But wait, there&amp;#39;s more! In the form of a gem called &lt;a href=&quot;https://github.com/laurilehmijoki/s3_website&quot;&gt;&lt;code&gt;s3_website&lt;/code&gt;&lt;/a&gt;. What does S3 Website do? Well...it helps you make a website using S3. It pushes your static site content output from something like Jekyll and into the bucket of your choosing.&lt;/p&gt;
+
+&lt;p&gt;It can even create a bucket and set it up for static hosting, but I prefer to do it manually. It&amp;#39;s not hard at all. &lt;a href=&quot;https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html&quot;&gt;AWS has a guide for setting up a bucket for website hosting&lt;/a&gt;, which goes through all the options and configuration needed for it to work. It also gives you more familiarity with what&amp;#39;s going on in case you have to configure Cloudfront later. There are only a few steps to do, and once it&amp;#39;s done you&amp;#39;re ready to go.&lt;/p&gt;
+
+&lt;p&gt;You can get to the exciting part now: making your website actually a website.&lt;/p&gt;
+
+&lt;p&gt;After installing Jekyll, run the command to generate a new website:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;&lt;span&gt;&lt;/span&gt;jekyll new SITE_NAME
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;You can run &lt;code&gt;jekyll serve&lt;/code&gt; to see the basic site it gives you. Which is more than sufficient for tutorial purposes.&lt;/p&gt;
+
+&lt;p&gt;The only edit to any of the files Jekyll generated that needs to be done for &lt;code&gt;s3_website&lt;/code&gt; is the Gemfile. Add &lt;code&gt;gem &amp;#39;s3_website&amp;#39;&lt;/code&gt; and run &lt;code&gt;bundle install&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;As the gem documentation suggests, running &lt;code&gt;s3_website cfg create&lt;/code&gt; will create an &lt;code&gt;s3_website.yml&lt;/code&gt; file containing the configuration for &lt;code&gt;s3_website&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;The two you really need are the following:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;&lt;span&gt;&lt;/span&gt;profile: &amp;lt;%= ENV[&amp;#39;AWS_PROFILE&amp;#39;] %&amp;gt;
+s3_bucket: &amp;lt;%= ENV[&amp;#39;S3_BUCKET&amp;#39;] %&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;In the above example, two critical values are set:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;profile&lt;/code&gt;: As in the AWS credential profile to be used.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;s3_bucket&lt;/code&gt;: The bucket that you want your Jekyll site to be pushed to.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Both are environment variables in the above example so it&amp;#39;s flexible for any user/bucket.&lt;/p&gt;
+
+&lt;p&gt;So to deploy, you&amp;#39;d run the following:&lt;/p&gt;
+&lt;div class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;&lt;span&gt;&lt;/span&gt;AWS_PROFILE=profile S3_BUCKET=bucket s3_website push
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;And...if you did everything properly, your website should be live on the S3 URL for your bucket.&lt;/p&gt;
+
+&lt;p&gt;Congratulations! You have a static website that&amp;#39;ll cost pennies a month to host!&lt;/p&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>The Biggest Software Mistake That Small Business Owners Make</title>
+      <link href="https://8thlight.com/blog/malcolm-newsome/2017/11/15/the-biggest-software-mistake-small-business-owners-make.html"/>
+      <updated>2017-11-15T00:00:00-06:00</updated>
+      <id>https://8thlight.com/blog/malcolm-newsome/2017/11/15/the-biggest-software-mistake-small-business-owners-make.html</id>
+
+      
+        <category term="Business" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/malcolm-newsome-7efb44d2727f3ec3627149e16c08391d38e00fe2706736c4385514ab8c9790e4.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Malcolm Newsome</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;Since we created our &lt;a href=&quot;https://8thlight.com/services/managed-services/&quot;&gt;Managed Software Services&lt;/a&gt; unit to focus squarely on Software Support and Maintenance services, I&amp;#39;ve had the opportunity to work with and talk to a lot of small business owners who were confronted with major problems because of this one thing: &lt;strong&gt;they relied exclusively on one sole developer to manage all of their software needs&lt;/strong&gt;. &lt;/p&gt;
+
+&lt;p&gt;It makes sense for a small business to hire just a single developer to help them get a web or mobile application off the ground. But while it is possible to bootstrap a successful company with a single developer, maintaining and growing a company with a single developer is much more challenging.&lt;/p&gt;
+
+&lt;p&gt;Read on to learn five reasons why it is problematic to employ only one developer, and how you can avoid potential pitfalls if you&amp;#39;re in this situation.&lt;/p&gt;
+
+&lt;h2&gt;Having only one developer is risky because:&lt;/h2&gt;
+
+&lt;h3&gt;Unforeseen circumstances in their availability.&lt;/h3&gt;
+
+&lt;p&gt;Assuming that your software is critical to the operation of your business, if your developer suddenly quits, is terminated, takes ill, or encounters anything else that causes them to be unable to perform their duties, critical issues may persist for far too long. This puts your business at significant risk of losing clients and revenue.&lt;/p&gt;
+
+&lt;h3&gt;Missed opportunities for growth.&lt;/h3&gt;
+
+&lt;p&gt;One person can only do so much. On the Managed Software Services Team, we often witness lone developers who are forced to spend their time addressing critical or urgent issues that arise. Thus, new initiatives and features must take a back seat—and end up delayed, overdue, or abandoned. If you&amp;#39;re looking to grow your business, this creates an uphill battle.&lt;/p&gt;
+
+&lt;h3&gt;Developer burnout is inevitable.&lt;/h3&gt;
+
+&lt;p&gt;When all of the burden for maintaining and building a system always falls on one person, they will reach the point of burnout at some point. It&amp;#39;s not a matter of if, but when. It is here that shortcuts are often taken. Once shortcuts are a part of a developer&amp;#39;s repertoire, you can expect a perpetual cycle of bugs and critical issues.&lt;/p&gt;
+
+&lt;h3&gt;The knowledge silo is inevitable.&lt;/h3&gt;
+
+&lt;p&gt;When a developer has no need to share their knowledge and no one to share their knowledge with, they will fall into habits that create problems down the road. This shows up often in the way of not having anyone else able to access code or fill in to perform routine tasks and other small things. Your system and source code will have nuances that only your developer knows. When this happens, the code becomes incredibly difficult to read and maintain. This has the net effect of costing your business more money than it should to resolve issues or improve the system. This also makes transitioning to a new developer or development team incredibly difficult should the need arise.&lt;/p&gt;
+
+&lt;h3&gt;Your developer doesn&amp;#39;t know it all.&lt;/h3&gt;
+
+&lt;p&gt;Even if your developer has the ability to program rockets or create new programming languages, they still won&amp;#39;t know everything. Having more than one person means more than one perspective on how to accomplish things. When more than one person can communicate with regard to solving a problem or creating something new, you have increased your chances of having a more robust system. &lt;/p&gt;
+
+&lt;h2&gt;If you&amp;#39;re like many other small businesses out there, you may be in this situation now. Here are three things you can do about it:&lt;/h2&gt;
+
+&lt;h3&gt;Hire another developer&lt;/h3&gt;
+
+&lt;p&gt;While I understand that this won&amp;#39;t work for all businesses, some are ready to invest in growing their own team. If you have room in your budget and software is crucial to the operation of your business, this is worth a very strong consideration.&lt;/p&gt;
+
+&lt;h3&gt;Hire a software support partner&lt;/h3&gt;
+
+&lt;p&gt;A reputable support partner can help ease the load that may be placed on your developer. Additionally, amongst other things, having a good support partner will help to diversify the knowledge base of the system so that you don&amp;#39;t find yourself in a total bind if your developer suddenly leaves for any reason. For less than the cost of hiring a full-time developer, you can increase availability, seize opportunities for growth, and distribute the knowledge and workload of your company&amp;#39;s software.&lt;/p&gt;
+
+&lt;p&gt;With software support solutions to fit almost any budget, &lt;a href=&quot;https://8thlight.com/services/managed-services/&quot;&gt;8th Light&amp;#39;s Managed Software Services&lt;/a&gt; team helps small businesses make huge impacts. We help business owners stabilize and enhance their software, migrate servers to the cloud with Amazon Web Services, discover and correct security vulnerabilities, and more.&lt;/p&gt;
+
+&lt;p&gt;Whether your company relies on a single developer or a small team, reach out to us for more information about how our team can help. &lt;/p&gt;
+</content>
+    </entry>
+  
+    <entry>
+      <title>Advice for early-career developers</title>
+      <link href="https://8thlight.com/blog/colin-jones/2017/10/24/advice-for-early-career-developers.html"/>
+      <updated>2017-10-24T00:00:00-05:00</updated>
+      <id>https://8thlight.com/blog/colin-jones/2017/10/24/advice-for-early-career-developers.html</id>
+
+      
+        <category term="Learning" />
+      
+        <category term="Community" />
+      
+        <category term="Apprenticeship" />
+      
+
+      
+        
+        
+          
+            <media:thumbnail height="150" url="https://8thlight.com/blog/assets/team/colin-jones-0d3cdfb7fca0ac0384c96e102382788c737d7c4ffc647a92b6ebc43d7abc1987.jpg" width="300" xmlns:media="http://search.yahoo.com/mrss/" />
+          
+          <author>
+            <name>Colin Jones</name>
+          </author>
+        
+      
+
+      <content type="html">&lt;p&gt;Several times a week I get emails or LinkedIn messages from recent or soon-to-be code school graduates, asking to buy me coffee or jump on a phone call to share career advice.
+I&amp;#39;ve been in a similar spot to where they are, trying to excel in the industry and looking for mentors.
+In fact, I kind of feel like I&amp;#39;ve been an apprentice for the last 11 years, and I don&amp;#39;t foresee that self-identification ending anytime soon.
+So I&amp;#39;d really love to be able to help, and besides, &lt;a href=&quot;https://8thlight.com/blog/lihsuan-lung/2013/03/25/we-are-principled-5.html&quot;&gt;one of our explicit company principles&lt;/a&gt; is about teaching &amp;quot;anyone with a willingness to learn.&amp;quot;&lt;/p&gt;
+
+&lt;p&gt;But while I want to help personally, with limited time and my other work and family responsibilities, it&amp;#39;s not scalable for me to meet with everybody.
+So typically I refer these folks to my fantastic colleagues who run our recruiting and hiring efforts, via &lt;a href=&quot;https://8thlight.com/contact/&quot;&gt;our contact form&lt;/a&gt;&amp;#39;s &amp;quot;Careers/Apprenticeship&amp;quot; option.
+But I still feel bad about needing to say &amp;quot;no&amp;quot; to people&amp;#39;s requests for help, so I want to share &lt;em&gt;something&lt;/em&gt; with them.&lt;/p&gt;
+
+&lt;p&gt;In this article, I&amp;#39;d like to share some tips for early-career developers, including code school grads.
+They&amp;#39;re based on my own experiences, which means there&amp;#39;s survivorship bias here, so I&amp;#39;d encourage you to take what works for you, and leave what doesn&amp;#39;t.&lt;/p&gt;
+
+&lt;h2&gt;Learning &amp;amp; Improving&lt;/h2&gt;
+
+&lt;p&gt;OK, so you&amp;#39;ve invested a bunch of time, and probably money, into your progress in the software industry.
+Hopefully your teachers, mentors, or code school have been honest with you about software as a career requiring continuous learning and improvement.
+The &lt;em&gt;most important&lt;/em&gt; advice I can share with you, as you&amp;#39;re starting out, is that a career is a long road, with many twists and turns along the way.
+The best way I know of to excel in software is to keep a &lt;a href=&quot;https://hbr.org/2016/01/what-having-a-growth-mindset-actually-means&quot;&gt;growth mindset&lt;/a&gt;.
+The more you can learn and improve, the more career options you&amp;#39;ll have.&lt;/p&gt;
+
+&lt;p&gt;I like to think about my own improvement broken down along two lines: input and output.
+I&amp;#39;ve tended to go through phases in my career where I&amp;#39;ve done more input than output, and (less often) vice versa, but I&amp;#39;ve found both to be essential for improvement.&lt;/p&gt;
+
+&lt;h3&gt;Input&lt;/h3&gt;
+
+&lt;p&gt;There are innumerable ways to gain knowledge: articles, books, papers, &lt;a href=&quot;https://en.wikipedia.org/wiki/Massive_open_online_course&quot;&gt;MOOCs&lt;/a&gt;, conversations, experimentation, project documentation, access to experts who are willing to answer questions, and many more.
+Quality and efficiency vary across these and other mechanisms, and many of us learn in different ways.
+Personally, I&amp;#39;ve gotten a ton of value out of reading books and applying what I&amp;#39;ve learned.&lt;/p&gt;
+
+&lt;p&gt;Reading blog posts like this one is a baby step: hopefully it&amp;#39;ll help a bit, but it&amp;#39;s the tip of the iceberg.
+I&amp;#39;d really recommend concentrating your reading more on classic books that&amp;#39;ll help you throughout your career.
+Book authors have spent many months, maybe years, distilling their years of experience into a well-crafted format that you can inhale over a few weekends.&lt;/p&gt;
+
+&lt;p&gt;Being willing to read is a superpower in our industry.
+It really is.&lt;/p&gt;
+
+&lt;p&gt;I&amp;#39;ll mostly stick to broad areas here rather than specific book recommendations, but you can check out &lt;a href=&quot;https://www.goodreads.com/trptcolin&quot;&gt;my Goodreads profile&lt;/a&gt; for more specifics if you&amp;#39;re curious.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Learn about software career development.&lt;/em&gt;
+For broad career development issues, I&amp;#39;ll make an exception in this post and highly recommend &lt;a href=&quot;http://shop.oreilly.com/product/9780596518387.do&quot;&gt;Apprenticeship Patterns&lt;/a&gt;, &lt;a href=&quot;https://pragprog.com/book/tpp/the-pragmatic-programmer&quot;&gt;The Pragmatic Programmer&lt;/a&gt;, and &lt;a href=&quot;https://pragprog.com/book/cfcar2/the-passionate-programmer&quot;&gt;The Passionate Programmer&lt;/a&gt;.
+Bluntly, if you were to stop reading this post right now and go read those three books instead, I&amp;#39;d think you made a wise decision.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Learn about code.&lt;/em&gt;
+Again, I prefer books to blog posts, for the reasons above—not just because I wrote &lt;a href=&quot;https://pragprog.com/book/cjclojure/mastering-clojure-macros&quot;&gt;a very niche book about Clojure macros&lt;/a&gt; [and you should absolutely ignore that book for now, unless you&amp;#39;re already into Clojure].
+Learn about the specific languages and frameworks that you&amp;#39;re concentrating on.
+Learn about software design &amp;amp; architecture principles and patterns.
+Learn about test-driven development and refactoring.
+Learn about the platform you&amp;#39;re deploying to.
+Learn about foundational computer science concepts.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Learn about communication.&lt;/em&gt;
+There&amp;#39;s a lot of material out there, both in the software space and outside.
+The way you communicate is a crucial part of the way others perceive you, whether it&amp;#39;s in conversations, in emails, or in documentation.
+We&amp;#39;re all working with other people, whether they&amp;#39;re teammates, managers, end users, or in some other role.
+If you are a nice person who communicates like a jerk, people are going to think you&amp;#39;re a jerk—you&amp;#39;ll need to know how to fix that.
+Learn about logical fallacies, cognitive biases, and nonviolent communication.
+Look for materials on communicating in effective writing, presentations, and difficult conversations.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Read open-source code.&lt;/em&gt;
+My experience is that reading OSS code is most effective when you&amp;#39;ve got a specific purpose in mind.
+But it can also be instructional to clone a repository from GitHub, run the tests, try and reproduce issues in the issue tracker, etc.
+At worst, you get an idea of how someone else codes and what&amp;#39;s easy or hard for you to understand.
+And at best, you&amp;#39;ll find yourself leaning over into the output side of things, which we&amp;#39;ll discuss next.&lt;/p&gt;
+
+&lt;h3&gt;Output&lt;/h3&gt;
+
+&lt;p&gt;&lt;em&gt;Write code.&lt;/em&gt;
+This isn&amp;#39;t necessarily the most &lt;em&gt;important&lt;/em&gt; skill you&amp;#39;ll need in your software career, but it&amp;#39;s certainly the one that&amp;#39;s most &lt;em&gt;unique&lt;/em&gt; to the role of a software developer.
+There are lots of ways to practice writing code, but my personal favorite is doing code katas.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Code katas&lt;/em&gt; have a couple of main schools of thought, and I like both of them for different reasons:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;Repetition&lt;/em&gt;. By solving the same problem many times with the same or similar solutions, you get to understand the problem really well. This gives you a sense of mastery, which I&amp;#39;ve found to be great for my emotional well-being when I&amp;#39;m mostly frustrated by programming problems. You can treat these as either a meditation, where you&amp;#39;re thinking deeply, or as a race, where you&amp;#39;re honing your skills with the tools. Some folks even treat &lt;a href=&quot;http://www.codekatas.org/&quot;&gt;repetition katas&lt;/a&gt; as a performance, with or without musical or spoken accompaniment.&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;New problems/solutions.&lt;/em&gt; The idea here is that most of the coding part of the job is about thinking about and solving &lt;em&gt;new&lt;/em&gt; problems, ones that might be related to ones you&amp;#39;ve seen before but aren&amp;#39;t identical. With &lt;a href=&quot;http://codekata.com/&quot;&gt;new problem katas&lt;/a&gt;, you&amp;#39;re intentionally putting yourself in the uncomfortable position of not-knowing, where we each need to learn to be OK as we&amp;#39;re moving toward solutions. You can find &lt;a href=&quot;http://rubyquiz.com/&quot;&gt;lots&lt;/a&gt; &lt;a href=&quot;http://www.4clojure.com/&quot;&gt;of&lt;/a&gt; &lt;a href=&quot;https://www.topcoder.com/&quot;&gt;examples&lt;/a&gt; &lt;a href=&quot;http://leetcode.com/&quot;&gt;of&lt;/a&gt; &lt;a href=&quot;https://www.hackerrank.com/&quot;&gt;bite&lt;/a&gt;-&lt;a href=&quot;https://projecteuler.net/&quot;&gt;sized&lt;/a&gt; &lt;a href=&quot;https://www.codewars.com/&quot;&gt;katas&lt;/a&gt;—many have ridiculous names, but they can still be great exercises to work through.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Katas are typically fairly constrained problems compared with &amp;quot;the real world&amp;quot;—more on the order of a single sitting, though some can get quite tricky and take much longer.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;http://chimera.labs.oreilly.com/books/1234000001813/ch05.html#context_id24&quot;&gt;Breakable toys&lt;/a&gt; are much more realistic and larger-scope projects than katas, but they still aren&amp;#39;t mission-critical.
+So it&amp;#39;s OK if they get broken as you&amp;#39;re learning.
+Having a breakable toy lets you see how different ideas work in the long term, which is super-helpful in the work world.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Open source software&lt;/em&gt; can be pretty intimidating to get into, but there are a few reasons I still think it&amp;#39;s a good idea to look at.
+First, you can get practice learning a new codebase.
+This will come in handy again and again throughout your career.
+Second, for many (not all) open-source projects, the level of code quality is pretty high.
+You&amp;#39;ll get a chance to see how experienced folks approach problems and solve them, by browsing issue and pull request history.&lt;/p&gt;
+
+&lt;p&gt;The intimidation factor is real, though.
+Make sure to pick friendly projects!
+You can get a rough idea of project friendliness by browsing the mailing list, group chat, or project issues.
+Or by asking some trusted mentors.&lt;/p&gt;
+
+&lt;p&gt;Aside from picking projects based on friendliness, you&amp;#39;ll probably find it helpful to start by learning to &lt;em&gt;use&lt;/em&gt; the project really well if you don&amp;#39;t already.
+This will force you to go through the existing documentation, and you&amp;#39;ll probably find some low-hanging fruit: typos, grammar issues, hard-to-understand explanations, etc.
+You may even find that there&amp;#39;s &lt;em&gt;no&lt;/em&gt; documentation at all.
+If you have a hard time ramping up on an open-source project after reading the documentation, that&amp;#39;s a bug that you can offer your help on!
+Many projects also tag issues as &amp;quot;beginner&amp;quot; or &amp;quot;newbie&amp;quot; friendly—this doesn&amp;#39;t necessarily mean new programmers, it could just mean new contributors to this project.
+I&amp;#39;ve also heard good things about OSS issue aggregators like &lt;a href=&quot;https://openhatch.org/&quot;&gt;OpenHatch&lt;/a&gt; and &lt;a href=&quot;http://up-for-grabs.net/&quot;&gt;Up for Grabs&lt;/a&gt; for finding projects that fit the bill here.&lt;/p&gt;
+
+&lt;p&gt;One caution here is to balance your need for progress against maintainers&amp;#39; own time management.
+Contributions work best when you clearly state the problem you&amp;#39;re trying to solve, offer your proposed solution, and be prepared for your solution to be rejected.
+So if you&amp;#39;re time-conscious, you&amp;#39;ll probably want to shoot for early feedback on your ideas for improvement.
+And try not to feel too hurt if &lt;a href=&quot;https://www.youtube.com/watch?v=VS6IpvTWwkQ&quot;&gt;the maintainers don&amp;#39;t respond for awhile&lt;/a&gt;—they&amp;#39;ve got a lot of stuff going on too.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Practice empathy and communication&lt;/em&gt; in your daily interactions.
+When little misunderstandings occur, ask yourself how they happened and what you can do in the future to prevent them.
+And how can you get past the misunderstanding with everyone feeling &lt;em&gt;better&lt;/em&gt; afterward than before.
+When you&amp;#39;re talking, ask yourself what your audience needs from you—do they need all the details, or do they mostly care about the highest-level bits?
+These skills are among the most crucial for any job that requires collaboration, and software development is all about collaboration: with other developers, with managers, with other colleagues, with end users, etc.
+Communication is a huge area, one where I still feel pretty weak—I&amp;#39;m actually in the process of looking for some explicit coaching in this area.
+Point being: the journey continues!&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Blog or journal.&lt;/em&gt;
+During my apprenticeship at 8th Light, I wrote a blog post every day, and it was a huge help in my development.
+It forced me to reflect on what I&amp;#39;d learned that day, which helped on those frustrating days where nothing seemed to go right.
+Putting my daily struggles and learning needs into words required me to understand them much better than if I hadn&amp;#39;t written them down.
+And that made it much easier for me to get past those struggles.
+This kind of journaling doesn&amp;#39;t have to be public, but making it public is useful for some folks in getting feedback, and it also gives you something to share with potential employers if you want.&lt;/p&gt;
+
+&lt;h2&gt;Managing your time&lt;/h2&gt;
+
+&lt;p&gt;So input &amp;amp; output can both be hugely beneficial, but how do we decide what to work on?
+I know a lot of folks, myself included, want to get great at every aspect of software, but it&amp;#39;s just not realistic.&lt;/p&gt;
+
+&lt;p&gt;Even if we had unlimited time this would be impossible, but other responsibilities like children and second jobs compound the issue: we have to learn to manage our time really efficiently.
+Every time we do sit down to learn something, we have to make a decision whether to widen our breadth of knowledge, or to dig deeper into something we&amp;#39;re already familiar with.
+Then we have to decide &lt;em&gt;which&lt;/em&gt; thing within those two broad categories we&amp;#39;re going to tackle.
+And so on.&lt;/p&gt;
+
+&lt;p&gt;So you&amp;#39;ll want to decide what your goals are at a high level, and find ways to move in that direction incrementally.
+One idea is to take a tip from agile project management: take your &lt;a href=&quot;https://en.wikipedia.org/wiki/Big_Hairy_Audacious_Goal&quot;&gt;big hairy audacious goal&lt;/a&gt; (product), figure out the first step or two towards it (releases), break the first one down to the first few medium-sized goals toward it (epics), and break those down into goals that you can knock out in a single sitting (stories).
+In this way, you can fit learning into the space that&amp;#39;s available, rather than having to rely on luxuries like wide-open nights and weekends.&lt;/p&gt;
+
+&lt;p&gt;Tracking that incremental motion toward your big goals can be super-motivating when you look back at what you&amp;#39;ve accomplished.
+And of course, reflecting on what you&amp;#39;ve done also gives you a chance to identify roadblocks, understand them, and figure out how to remove them.
+You&amp;#39;ll probably find your goals changing as your job needs and interests change, so it&amp;#39;s healthy to revisit those from time to time as well.
+Just be wary of shifting goals too often—progress takes time, even when you&amp;#39;re laser-focused.&lt;/p&gt;
+
+&lt;h2&gt;Find mentors&lt;/h2&gt;
+
+&lt;p&gt;We all need feedback.
+Without feedback on how we&amp;#39;re progressing, it&amp;#39;s easy to divorce our own self-assessment from reality, and to think that we&amp;#39;re doing much worse or better than we really are.
+There&amp;#39;s also a massive amount of information out there, and mentors can help point us to the best resources for where we are.&lt;/p&gt;
+
+&lt;p&gt;Of course, I&amp;#39;m biased toward formal mentorship like what we offer in &lt;a href=&quot;https://8thlight.com/apprenticeship/&quot;&gt;8th Light&amp;#39;s apprenticeship program&lt;/a&gt;, where your primary job is learning.
+But I won&amp;#39;t lie, this is a &lt;em&gt;huge&lt;/em&gt; investment for our company that requires a tremendous amount of buy-in at every level—not every company can make this work.
+In Chicago, we&amp;#39;re also working on &lt;a href=&quot;https://weirichinstitute.com/&quot;&gt;a program to provide companies with continuing education for software developers&lt;/a&gt; that you could ask your boss about if you&amp;#39;re interested.&lt;/p&gt;
+
+&lt;p&gt;Whether &amp;quot;apprentice&amp;quot; is part of your job description or not, try to find at least one person who can help guide you in your progress.
+My first real mentor didn&amp;#39;t have a formal mentoring role, but he was &lt;a href=&quot;https://twitter.com/travisroberts&quot;&gt;the developer in the next cube&lt;/a&gt;, he was a few years ahead of me in experience, and he understood how to communicate the basics.
+Between his direct feedback and the books he told me to read, pretty quickly I was ramped up enough on the CSS box model that I could slice &amp;amp; dice Photoshop docs into reasonably standards-compliant XHTML websites (and this was before flexbox!).
+So informal mentorship can work great, and it&amp;#39;s much easier to find, because it happens naturally with friendly coworkers and acquaintances (and even with some unfriendly ones).&lt;/p&gt;
+
+&lt;p&gt;You can find mentors outside the workplace, too.
+A few ideas:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;&lt;a href=&quot;https://www.codenewbie.org/&quot;&gt;CodeNewbie&lt;/a&gt;&lt;/em&gt; is a Twitter chat, podcast, blog, and community with tons of great ideas about breaking into and excelling in this industry, with participants at all levels.&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;Social media&lt;/em&gt;: Despite &lt;a href=&quot;https://en.wikipedia.org/wiki/Mobile_phone_overuse&quot;&gt;its [my] faults&lt;/a&gt;, I&amp;#39;ve found Twitter to be particularly well-populated with software experts sharing tips, links, and stories. And some people are willing to answer questions directly—others have too many folks jostling for their attention, so don&amp;#39;t feel too bad if they can&amp;#39;t make time for you directly.&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;User groups&lt;/em&gt;: If you&amp;#39;re in an area that has them and you can make the timing work, user groups can be a great place to meet other folks who are excited about software. Check out &lt;a href=&quot;https://www.meetup.com/&quot;&gt;Meetup&lt;/a&gt; for topics you might be interested in. Introduce yourself and make connections—if you&amp;#39;re like me this will be hard, but you might just meet your next employer here.&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;Open source software&lt;/em&gt;: The people reviewing your pull requests are already giving you direct feedback! Maybe not career-level stuff, but they might be up for that too as you contribute more.&lt;/li&gt;
+&lt;li&gt;Our Chicago location is starting a trial &amp;quot;external mentorship&amp;quot; program to provide guidance, code review, and networking for early-career folks looking for Junior Developer roles. It&amp;#39;ll be free, just a way for us to help more folks. &lt;a href=&quot;https://8thlight.com/contact/&quot;&gt;Let us know&lt;/a&gt; if you&amp;#39;d like to get involved.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Stepping back a bit, if you&amp;#39;re looking for a mentor, I recommend starting with informal relationships and getting help with specific questions, rather than asking folks a broader &amp;quot;will you mentor me?&amp;quot;
+It&amp;#39;s much easier for folks to commit to carving out bounded time to help you—the broader mentoring question, even when people understand it (they won&amp;#39;t always!), is abstract enough that the commitment seems almost infinite.
+Besides, the name of the relationship isn&amp;#39;t all that important—what you really want here is to get external feedback and make progress toward your goals.&lt;/p&gt;
+
+&lt;h2&gt;Good luck!&lt;/h2&gt;
+
+&lt;p&gt;Software is a really interesting industry.
+There&amp;#39;s always so much more we can learn from each other, and so much more we can teach each other.
+I look forward to hearing about your successes!&lt;/p&gt;
+
+&lt;p&gt;And perhaps most importantly, don&amp;#39;t forget to pay it forward, and help out those who are coming up behind you!&lt;/p&gt;
+</content>
+    </entry>
+  
+</feed>

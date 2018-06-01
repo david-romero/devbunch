@@ -13,3 +13,4 @@ feed-collector:
   cron: 0 0 1 * * ?
   sender:
     topicName: feed-item
+  metadata-path: /tmp/

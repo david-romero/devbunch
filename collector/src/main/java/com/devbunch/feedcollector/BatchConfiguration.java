@@ -14,8 +14,10 @@ import org.springframework.batch.support.transaction.ResourcelessTransactionMana
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.integration.metadata.PropertiesPersistingMetadataStore;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -72,6 +74,14 @@ public class BatchConfiguration {
 		final SimpleJobLauncher launcher = new SimpleJobLauncher();
 		launcher.setJobRepository(jobRepository);
 		return launcher;
+	}
+	
+	@Bean(destroyMethod = "destroy")
+	public PropertiesPersistingMetadataStore metadataStore(@Value("${feed-collector.metadata-path}") String propertiesMetadataPath) throws Exception {
+		final PropertiesPersistingMetadataStore metadataStore = new PropertiesPersistingMetadataStore();
+		metadataStore.setBaseDirectory(propertiesMetadataPath);
+		metadataStore.afterPropertiesSet();
+		return metadataStore;
 	}
 
 }
