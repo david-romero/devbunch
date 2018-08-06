@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: apache-kafka
+  namespace: devbunch
+spec:
+  ports:
+    - name: 9092-tpc
+      port: 9092
+      protocol: TCP
+      targetPort: 9092
+  selector:
+    deploymentconfig: apache-kafka
+  sessionAffinity: None
+  type: ClusterIP

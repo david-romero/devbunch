@@ -31,6 +31,8 @@ spec:
           ports:
             - containerPort: 7474
               protocol: TCP
+            - containerPort: 7687
+              protocol: TCP
           resources: {}
       dnsPolicy: ClusterFirst
       hostname: neo4j

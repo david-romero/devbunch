@@ -1,0 +1,10 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  labels:
+    app: graph-model
+  name: graph-model
+  namespace: devbunch
+spec:
+  lookupPolicy:
+    local: false
