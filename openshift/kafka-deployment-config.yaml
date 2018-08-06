@@ -1,0 +1,79 @@
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  labels:
+    app: apache-kafka
+  name: apache-kafka
+  namespace: devbunch
+spec:
+  replicas: 1
+  selector:
+    deploymentconfig: apache-kafka
+  strategy:
+    activeDeadlineSeconds: 21600
+    resources: {}
+    rollingParams:
+      intervalSeconds: 1
+      maxSurge: 25%
+      maxUnavailable: 25%
+      timeoutSeconds: 600
+      updatePeriodSeconds: 1
+    type: Rolling
+  template:
+    metadata:
+      labels:
+        deploymentconfig: apache-kafka
+    spec:
+      containers:
+        - args:
+            - config/server.properties
+            - '--override'
+            - advertised.host.name=apache-kafka
+            - '--override'
+            - log.segment.bytes=10485760
+            - '--override'
+            - log.retention.bytes=10485760
+          command:
+            - bin/kafka-server-start.sh
+          image: rondinif/openshift-kafka
+          imagePullPolicy: Always
+          name: apache-kafka
+          ports:
+            - containerPort: 9092
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /tmp/kafka-logs
+              name: kafka-logs
+        - args:
+            - config/zookeeper.properties
+          command:
+            - bin/zookeeper-server-start.sh
+          image: rondinif/openshift-kafka
+          imagePullPolicy: Always
+          name: apache-zookeeper
+          ports:
+            - containerPort: 2181
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /tmp/zookeeper
+              name: zookeeper
+      dnsPolicy: ClusterFirst
+      hostname: apache-kafka
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - emptyDir: {}
+          name: kafka-logs
+        - emptyDir: {}
+          name: zookeeper
+  test: false
+  triggers:
+    - type: ConfigChange

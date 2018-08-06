@@ -1,0 +1,36 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  labels:
+    app: collector
+  name: collector
+  namespace: devbunch
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: 'collector:latest'
+  postCommit: {}
+  resources: {}
+  runPolicy: Serial
+  source:
+    git:
+      ref: develop
+      uri: 'https://github.com/david-romero/devbunch.git'
+    type: Git
+  strategy:
+    sourceStrategy:
+      env:
+        - name: MAVEN_ARGS_APPEND
+          value: '-pl collector --also-make'
+        - name: ARTIFACT_DIR
+          value: collector/target/
+        - name: MODULE_DIR
+          value: collector
+      from:
+        kind: ImageStreamTag
+        name: 'fuse-java:latest'
+        namespace: devbunch
+    type: Source
+  triggers:
+    - type: ConfigChange
