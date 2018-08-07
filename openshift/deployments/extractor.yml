@@ -1,0 +1,69 @@
+apiVersion: apps.openshift.io/v1
+kind: DeploymentConfig
+metadata:
+  labels:
+    app: extractor
+  name: extractor
+  namespace: devbunch
+spec:
+  replicas: 1
+  selector:
+    deploymentconfig: extractor
+  strategy:
+    activeDeadlineSeconds: 21600
+    resources: {}
+    rollingParams:
+      intervalSeconds: 1
+      maxSurge: 25%
+      maxUnavailable: 25%
+      timeoutSeconds: 600
+      updatePeriodSeconds: 1
+    type: Rolling
+  template:
+    metadata:
+      labels:
+        app: extractor
+        deploymentconfig: extractor
+    spec:
+      containers:
+        - env:
+            - name: SERVER_PORT
+              value: '8080'
+            - name: ENV
+              value: stage
+          image: 'extractor:latest'
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /actuator/health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: extractor
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+  test: false
+  triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+          - extractor
+        from:
+          kind: ImageStreamTag
+          name: 'extractor:latest'
+          namespace: devbunch
+      type: ImageChange
+    - type: ConfigChange
