@@ -1,0 +1,10 @@
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  labels:
+    app: search-api
+  name: search-api
+  namespace: devbunch
+spec:
+  lookupPolicy:
+    local: false

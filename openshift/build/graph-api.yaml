@@ -2,14 +2,14 @@ apiVersion: build.openshift.io/v1
 kind: BuildConfig
 metadata:
   labels:
-    app: extractor
-  name: extractor
+    app: graph-api
+  name: graph-api
   namespace: devbunch
 spec:
   output:
     to:
       kind: ImageStreamTag
-      name: 'extractor:latest'
+      name: 'graph-api:latest'
   postCommit: {}
   resources: {}
   runPolicy: Serial
@@ -22,16 +22,15 @@ spec:
     sourceStrategy:
       env:
         - name: MAVEN_ARGS_APPEND
-          value: '-pl extractor --also-make'
+          value: '-pl graph-api --also-make'
         - name: ARTIFACT_DIR
-          value: extractor/target/
+          value: graph-api/target/
         - name: MODULE_DIR
-          value: extractor
+          value: graph-api
       from:
         kind: ImageStreamTag
         name: 'fuse-java:latest'
         namespace: devbunch
     type: Source
-  successfulBuildsHistoryLimit: 5
   triggers:
     - type: ConfigChange

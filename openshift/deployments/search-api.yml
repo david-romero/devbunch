@@ -2,13 +2,13 @@ apiVersion: apps.openshift.io/v1
 kind: DeploymentConfig
 metadata:
   labels:
-    app: extractor
-  name: extractor
+    app: search-api
+  name: search-api
   namespace: devbunch
 spec:
-  replicas: 1
+  replicas: 2
   selector:
-    deploymentconfig: extractor
+    deploymentconfig: search-api
   strategy:
     activeDeadlineSeconds: 21600
     resources: {}
@@ -22,8 +22,8 @@ spec:
   template:
     metadata:
       labels:
-        app: extractor
-        deploymentconfig: extractor
+        app: search-api
+        deploymentconfig: search-api
     spec:
       containers:
         - env:
@@ -31,7 +31,6 @@ spec:
               value: '8080'
             - name: ENV
               value: 'stage'
-          image: 'extractor:latest'
           imagePullPolicy: Always
           livenessProbe:
             failureThreshold: 3
@@ -43,7 +42,8 @@ spec:
             periodSeconds: 10
             successThreshold: 1
             timeoutSeconds: 1
-          name: extractor
+          name: search-api
+          image: 'search-api:latest'
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -60,10 +60,10 @@ spec:
     - imageChangeParams:
         automatic: true
         containerNames:
-          - extractor
+          - search-api
         from:
           kind: ImageStreamTag
-          name: 'extractor:latest'
+          name: 'search-api:latest'
           namespace: devbunch
       type: ImageChange
     - type: ConfigChange

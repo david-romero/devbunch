@@ -16,7 +16,7 @@ spec:
   source:
     git:
       ref: develop
-      uri: 'https://github.com/david-romero/devbunch.git'
+      uri: 'https://github.com/ivangrod/devbunch.git'
     type: Git
   strategy:
     sourceStrategy:

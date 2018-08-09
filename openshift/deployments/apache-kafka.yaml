@@ -35,7 +35,7 @@ spec:
             - log.retention.bytes=10485760
           command:
             - bin/kafka-server-start.sh
-          image: rondinif/openshift-kafka
+          image: davromalc/apache-kafka
           imagePullPolicy: Always
           name: apache-kafka
           ports:
@@ -51,7 +51,7 @@ spec:
             - config/zookeeper.properties
           command:
             - bin/zookeeper-server-start.sh
-          image: rondinif/openshift-kafka
+          image: davromalc/apache-kafka
           imagePullPolicy: Always
           name: apache-zookeeper
           ports:
