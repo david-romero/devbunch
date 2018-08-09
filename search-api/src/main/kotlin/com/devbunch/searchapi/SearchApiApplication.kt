@@ -7,10 +7,10 @@ import org.springframework.boot.builder.SpringApplicationBuilder
 import org.springframework.core.env.StandardEnvironment
 
 @SpringBootApplication
-open class SearchApiApplication
+class SearchApiApplication
 
 	val DEFAULT_ENVIRONMENT = "local"
-	
+
 	fun main(args: Array<String>) {
 	     SpringApplicationBuilder(SearchApiApplication::class.java).environment(object : StandardEnvironment() {
 
